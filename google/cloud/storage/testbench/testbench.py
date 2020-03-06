@@ -561,22 +561,6 @@ def objects_get_common(bucket_name, object_name, revision):
     return response
 
 
-@gcs.route('/b/<bucket_name>/o/<path:object_name>')
-def objects_get(bucket_name, object_name):
-    """Implement the 'Objects: get' API.  Read objects or their metadata."""
-    _, blob = testbench_utils.lookup_object(bucket_name, object_name)
-    blob.check_preconditions(flask.request)
-    revision = blob.get_revision(flask.request)
-
-    media = flask.request.args.get('alt', None)
-    if media is None or media == 'json':
-        return testbench_utils.filtered_response(flask.request, revision.metadata)
-    if media != 'media':
-        raise error_response.ErrorResponse('Invalid alt=%s parameter' % media)
-    revision.validate_encryption_for_read(flask.request)
-    return objects_get_common(bucket_name, object_name, revision)
-
-
 @gcs.route('/b/<bucket_name>/o/<path:object_name>', methods=['DELETE'])
 def objects_delete(bucket_name, object_name):
     """Implement the 'Objects: delete' API.  Delete objects."""
@@ -727,6 +711,7 @@ def download_error(error):
     return error.as_response()
 
 
+@gcs.route('/b/<bucket_name>/o/<path:object_name>')
 @download.route('/b/<bucket_name>/o/<path:object_name>')
 def objects_get(bucket_name, object_name):
     """Implement the 'Objects: get' API.  Read objects or their metadata."""
