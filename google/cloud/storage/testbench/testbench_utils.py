@@ -376,8 +376,13 @@ def parse_part(multipart_upload_part):
         next_line = multipart_upload_part.find(b'\r\n', index)
     return headers, multipart_upload_part[next_line + 2:]
 
+
 def parse_multi_part(request):
-    """Return ....
+    """Parse a multi-part request
+
+    :param request:flask.Request multipart request.
+    :return: a tuple with the resource, media_headers and the media_body.
+    :rtype: (dict, dict, str)
     """
     content_type = request.headers.get('content-type')
     if content_type is None or not content_type.startswith(

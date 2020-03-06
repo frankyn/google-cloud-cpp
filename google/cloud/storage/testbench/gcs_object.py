@@ -578,10 +578,12 @@ class GcsObject(object):
 
         :param gcs_url:str the root URL for the fake GCS service.
         :param request:flask.Request the contents of the HTTP request.
+        :param resource:dict JSON resource with object metadata.
+        :param media_headers:dict media headers in a multi-part upload.
+        :param media_body:str object data in a multi-part upload.
         :return: the newly created object version.
         :rtype: GcsObjectVersion
         """
-
         # There are two ways to specify the content-type, the 'content-type'
         # header and the resource['contentType'] field. They must be consistent,
         # and the service generates an error when they are not.

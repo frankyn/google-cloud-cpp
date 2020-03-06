@@ -463,7 +463,6 @@ def objects_get_common(bucket_name, object_name, revision):
         def streamer():
             chunk_size = 64 * 1024
             for r in range(0, len(response_payload), chunk_size):
-                print('streamer')
                 if r > 1024 * 1024:
                     print("\n\n###### EXIT to simulate crash\n")
                     time.sleep(0.1)
@@ -477,7 +476,7 @@ def objects_get_common(bucket_name, object_name, revision):
         content_range = 'bytes %d-%d/%d' % (begin, end - 1, length)
         headers = {
             'Content-Range': content_range,
-            'Content-Length': length, # this is required to cause 'com.google.cloud.storage.StorageException: Connection closed prematurely: bytesRead = 1114112, Content-Length = 10485760'
+            'Content-Length': length,
             'x-goog-hash': revision.x_goog_hash_header(),
             'x-goog-generation': revision.generation
         }
