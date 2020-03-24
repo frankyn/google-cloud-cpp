@@ -798,7 +798,7 @@ def resumable_upload_chunk(bucket_name):
 
 
 # Define the WSGI application to handle (a few) requests in the XML API.
-XMLAPI_HANDLER_PATH = '/xmlapi'
+XMLAPI_HANDLER_PATH = ''
 xmlapi = flask.Flask(__name__)
 xmlapi.debug = True
 
@@ -810,7 +810,7 @@ def xmlapi_error(error):
 
 @xmlapi.route('/<bucket_name>/<object_name>')
 def xmlapi_get_object(bucket_name, object_name):
-    """Implement the 'Objects: insert' API.  Insert a new GCS Object."""
+    """Implement the 'Objects: get' API.  Downloads a GCS Object."""
     object_path, blob = testbench_utils.lookup_object(bucket_name, object_name)
     if flask.request.args.get('acl') is not None:
         raise error_response.ErrorResponse(

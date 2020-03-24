@@ -110,7 +110,7 @@ class GcsBucket(object):
         or BucketPolicyOnly patch.
 
         :param patch:dict a dictionary of metadata values.
-        :param field: one of 'uniformBucketLevelAccess' or 'bucketPolicyOnly' 
+        :param field: one of 'uniformBucketLevelAccess' or 'bucketPolicyOnly'
         """
         field_was_enabled = False
         if self.metadata.get('iamConfiguration'):
@@ -548,6 +548,7 @@ class GcsBucket(object):
         :param request: flask.Request the original http request.
         :return: the HTTP response to send back.
         """
+        print(request.headers.get("Content-Encoding"))
         x_upload_content_type = request.headers.get(
             'x-upload-content-type', 'application/octet-stream')
         x_upload_content_length = request.headers.get(
