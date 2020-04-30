@@ -762,7 +762,7 @@ def objects_insert(bucket_name):
     upload_type = flask.request.args.get("uploadType")
     instructions = flask.request.headers.get('x-goog-testbench-instructions')
     if instructions == 'return-503':
-        return flask.Response('Service Unavailable', status=503, headers=headers)
+        return flask.Response('Service Unavailable', status=503)
     if upload_type is None:
         raise error_response.ErrorResponse(
             "uploadType not set in Objects: insert", status_code=400
