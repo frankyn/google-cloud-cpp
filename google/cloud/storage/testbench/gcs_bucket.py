@@ -31,7 +31,7 @@ class GcsBucket(object):
         self.name = name
         self.gcs_url = gcs_url
         self.metadata = {
-            "metageneration": 0,
+            "metageneration": "0",
             "name": self.name,
             "location": "US",
             "storageClass": "STANDARD",
@@ -39,9 +39,9 @@ class GcsBucket(object):
             "labels": {"foo": "bar", "baz": "qux"},
             "owner": {"entity": "project-owners-123456789", "entityId": ""},
         }
-        self.notification_id = 1
+        self.notification_id = "1"
         self.notifications = {}
-        self.iam_version = 1
+        self.iam_version = "1"
         self.counter = 1
         self.iam_bindings = []
         self.resumable_uploads = {}
@@ -68,7 +68,7 @@ class GcsBucket(object):
 
     def increase_metageneration(self):
         """Increase the current metageneration number."""
-        new = self.metadata.get("metageneration", 0) + 1
+        new = str(int(self.metadata.get("metageneration", "0")) + 1)
         self.metadata["metageneration"] = new
 
     def versioning_enabled(self):
@@ -385,13 +385,13 @@ class GcsBucket(object):
         :return: the new notification value.
         :rtype:dict
         """
-        notification_id = "notification-%d" % self.notification_id
+        notification_id = "notification-%s" % self.notification_id
         link = "%s/b/%s/notificationConfigs/%s" % (
             self.gcs_url,
             self.name,
             notification_id,
         )
-        self.notification_id += 1
+        self.notification_id = str(int(self.notification_id) + 1)
         notification = json.loads(request.data)
         notification.update(
             {
@@ -547,7 +547,7 @@ class GcsBucket(object):
         self.metadata["acl"] = new_acl
         self.iam_bindings = new_iam_bindings
         if policy.get("version") is None:
-            self.iam_version = 1
+            self.iam_version = "1"
         else:
             self.iam_version = policy.get("version")
         self.counter = self.counter + 1
