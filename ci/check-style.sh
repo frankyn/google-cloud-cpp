@@ -24,20 +24,13 @@ fi
 # This script assumes it is running the top-level google-cloud-cpp directory.
 
 readonly BINDIR="$(dirname "$0")"
+source "${BINDIR}/colors.sh"
 
-# Build paths to ignore in find(1) commands by reading .gitignore.
-declare -a ignore=( -path ./.git )
-if [[ -f .gitignore ]]; then
-  while read -r line; do
-    case "${line}" in
-    [^#]*/*) ignore+=( -o -path "./$(expr "${line}" : '\(.*\)/')" ) ;;
-    [^#]*)   ignore+=( -o -name "${line}" ) ;;
-    esac
-  done < .gitignore
+problems=""
+if ! find google/cloud -name '*.h' -print0 |
+  xargs -0 awk -f "${BINDIR}/check-include-guards.gawk"; then
+  problems="${problems} include-guards"
 fi
-
-find google/cloud -name '*.h' -print0 |
-  xargs -0 awk -f "${BINDIR}/check-include-guards.gawk"
 
 replace_original_if_changed() {
   if [[ $# != 2 ]]; then
@@ -57,75 +50,80 @@ replace_original_if_changed() {
 
 # Apply cmake_format to all the CMake list files.
 #     https://github.com/cheshirekow/cmake_format
-find . \( "${ignore[@]}" \) -prune -o \
-       \( -name 'CMakeLists.txt' -o -name '*.cmake' \) \
-       -print0 |
-  while IFS= read -r -d $'\0' file; do
-    cmake-format "${file}" >"${file}.tmp"
-    replace_original_if_changed "${file}" "${file}.tmp"
-  done
+git ls-files -z | grep -zE '((^|/)CMakeLists\.txt|\.cmake)$' |
+  xargs -P "${NCPU}" -n 1 -0 cmake-format -i
 
 # Apply clang-format(1) to fix whitespace and other formatting rules.
 # The version of clang-format is important, different versions have slightly
 # different formatting output (sigh).
-find google/cloud \( -name '*.cc' -o -name '*.h' \) -print0 |
-  while IFS= read -r -d $'\0' file; do
-    clang-format "${file}" >"${file}.tmp"
-    replace_original_if_changed "${file}" "${file}.tmp"
-  done
+git ls-files -z | grep -zE '\.(cc|h)$' |
+  xargs -P "${NCPU}" -n 50 -0 clang-format -i
+
+# Apply buildifier to fix the BUILD and .bzl formatting rules.
+#    https://github.com/bazelbuild/buildtools/tree/master/buildifier
+git ls-files -z | grep -zE '\.(BUILD|bzl)$' | xargs -0 buildifier -mode=fix
+git ls-files -z | grep -zE '(^|/)(BUILD|WORKSPACE)$' |
+  xargs -0 buildifier -mode=fix
+
+# Apply psf/black to format Python files.
+#    https://github.com/bazelbuild/buildtools/tree/master/buildifier
+git ls-files -z | grep -z '\.py$' | xargs -0 python3 -m black
+
+# Apply shfmt to format all shell scripts
+git ls-files -z | grep -z '\.sh$' | xargs -0 shfmt -w -i 2
+
+# Apply shellcheck(1) to emit warnings for common scripting mistakes.
+if ! git ls-files -z | grep -z '\.sh$' |
+  xargs -0 shellcheck \
+    --exclude=SC1090 \
+    --exclude=SC2034 \
+    --exclude=SC2153 \
+    --exclude=SC2181; then
+  problems="${problems} shellcheck"
+fi
 
 # Apply several transformations that cannot be enforced by clang-format:
 #     - Replace any #include for grpc++/* with grpcpp/*. The paths with grpc++
 #       are obsoleted by the gRPC team, so we should not use them in our code.
 #     - Replace grpc::<BLAH> with grpc::StatusCode::<BLAH>, the aliases in the
 #       `grpc::` namespace do not exist inside google.
-find google/cloud \( -name '*.cc' -o -name '*.h' \) -print0 |
+git ls-files -z | grep -zE '\.(cc|h)$' |
   while IFS= read -r -d $'\0' file; do
     # We used to run run `sed -i` to apply these changes, but that touches the
     # files even if there are no changes applied, forcing a rebuild each time.
     # So we first apply the change to a temporary file, and replace the original
     # only if something changed.
     sed -e 's/grpc::\([A-Z][A-Z_][A-Z_]*\)/grpc::StatusCode::\1/g' \
-        -e 's;#include <grpc\\+\\+/grpc\+\+.h>;#include <grpcpp/grpcpp.h>;' \
-        -e 's;#include <grpc\\+\\+/;#include <grpcpp/;' \
-        "${file}" > "${file}.tmp"
+      -e 's;#include <grpc\\+\\+/grpc\+\+.h>;#include <grpcpp/grpcpp.h>;' \
+      -e 's;#include <grpc\\+\\+/;#include <grpcpp/;' \
+      "${file}" >"${file}.tmp"
     replace_original_if_changed "${file}" "${file}.tmp"
   done
-
-# Apply buildifier to fix the BUILD and .bzl formatting rules.
-#    https://github.com/bazelbuild/buildtools/tree/master/buildifier
-find . \( "${ignore[@]}" \) -prune -o \
-       \( -name BUILD -o -name '*.bzl' \) \
-       -print0 |
-  xargs -0 buildifier -mode=fix
-
-# Apply shellcheck(1) to emit warnings for common scripting mistakes.
-find . \( "${ignore[@]}" \) -prune -o \
-       -iname '*.sh' -exec shellcheck \
-         --exclude=SC1090 \
-         --exclude=SC2034 \
-         --exclude=SC2153 \
-         --exclude=SC2181 \
-       '{}' \;
 
 # Apply transformations to fix whitespace formatting in files not handled by
 # clang-format(1) above.  For now we simply remove trailing blanks.  Note that
 # we do not expand TABs (they currently only appear in Makefiles and Makefile
 # snippets).
-find . \( "${ignore[@]}" \) -prune -o \
-       -type f ! -name '*.gz' \
-       -print0 |
+git ls-files -z | grep -zv '\.gz$' |
   while IFS= read -r -d $'\0' file; do
     sed -e 's/[[:blank:]][[:blank:]]*$//' \
-        "${file}" > "${file}.tmp"
+      "${file}" >"${file}.tmp"
     replace_original_if_changed "${file}" "${file}.tmp"
   done
 
 # Report any differences created by running the formatting tools. Report any
-# differences created by running the formatting tools. IFF we are running as
-# part of a CI build. Otherwise, a human probably invoked this script in which
-# case we'll just leave the formatted files in their local git repo so they can
-# diff them and commit the correctly formatted files.
-if [[ "${RUNNING_CI}" != "no" ]]; then
-  git diff --ignore-submodules=all --color --exit-code .
+# differences created by running the formatting tools.
+if ! git diff --ignore-submodules=all --color --exit-code .; then
+  problems="${problems} formatting"
+fi
+
+# Exit with an error IFF we are running as part of a CI build. Otherwise, a
+# human probably invoked this script in which case we'll just leave the
+# formatted files in their local git repo so they can diff them and commit the
+# correctly formatted files.
+if [[ -n "${problems}" ]]; then
+  log_red "Detected style problems (${problems:1})"
+  if [[ "${RUNNING_CI}" != "no" ]]; then
+    exit 1
+  fi
 fi

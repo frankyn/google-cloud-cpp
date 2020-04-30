@@ -20,6 +20,10 @@ cmake_minimum_required(VERSION 3.5)
 set(PACKAGE_BUGREPORT "https://github.com/googleapis/google-cloud-cpp/issues")
 project(google-cloud-cpp CXX C)
 
+set(GOOGLE_CLOUD_CPP_VERSION_MAJOR 1)
+set(GOOGLE_CLOUD_CPP_VERSION_MINOR 13)
+set(GOOGLE_CLOUD_CPP_VERSION_PATCH 0)
+
 # Configure the Compiler options, we use C++11 features by default.
 set(GOOGLE_CLOUD_CPP_CXX_STANDARD
     11
@@ -93,10 +97,6 @@ if ("${GOOGLE_CLOUD_CPP_ENABLE_CCACHE}")
                                      "${GOOGLE_CLOUD_CPP_CCACHE_PROGRAM}")
         set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK
                                      "${GOOGLE_CLOUD_CPP_CCACHE_PROGRAM}")
-
-        set(GOOGLE_CLOUD_CPP_EXTERNAL_PROJECT_CCACHE
-            "-DCMAKE_CXX_COMPILER_LAUNCHER=${GOOGLE_CLOUD_CPP_CCACHE_PROGRAM}"
-            "-DCMAKE_CC_COMPILER_LAUNCHER=${GOOGLE_CLOUD_CPP_CCACHE_PROGRAM}")
     endif ()
 endif ()
 
@@ -128,12 +128,15 @@ mark_as_advanced(GOOGLE_CLOUD_CPP_TESTING_UTIL_ENABLE_INSTALL)
 
 include(CMakeDependentOption)
 
+option(GOOGLE_CLOUD_CPP_ENABLE_BIGQUERY "Enable building the BigQuery library."
+       ON)
 option(GOOGLE_CLOUD_CPP_ENABLE_BIGTABLE "Enable building the Bigtable library."
        ON)
 option(GOOGLE_CLOUD_CPP_ENABLE_STORAGE "Enable building the Storage library."
        ON)
 option(GOOGLE_CLOUD_CPP_ENABLE_FIRESTORE
        "Enable building the Firestore library." ON)
+option(GOOGLE_CLOUD_CPP_ENABLE_PUBSUB "Enable building the Pub/Sub library." ON)
 
 cmake_dependent_option(
     GOOGLE_CLOUD_CPP_ENABLE_GRPC_UTILS
@@ -148,15 +151,24 @@ include(CTest)
 # Each subproject adds dependencies to this target to have their docs generated.
 add_custom_target(doxygen-docs)
 
-# Only build the common library if any of the other libraries are enabled.
+# TODO(#3926) - minimize the components built in the common library. For
+# example, if only google/cloud/storage is enabled, we can disable the gRPC
+# components.
+add_subdirectory(google/cloud)
 if (GOOGLE_CLOUD_CPP_ENABLE_STORAGE)
     add_subdirectory(google/cloud/storage)
+endif ()
+if (GOOGLE_CLOUD_CPP_ENABLE_BIGQUERY)
+    add_subdirectory(google/cloud/bigquery)
 endif ()
 if (GOOGLE_CLOUD_CPP_ENABLE_BIGTABLE)
     add_subdirectory(google/cloud/bigtable)
 endif ()
 if (GOOGLE_CLOUD_CPP_ENABLE_FIRESTORE)
     add_subdirectory(google/cloud/firestore)
+endif ()
+if (GOOGLE_CLOUD_CPP_ENABLE_PUBSUB)
+    add_subdirectory(google/cloud/pubsub)
 endif ()
 
 # The examples are more readable if we use exceptions for error handling. We had

@@ -21,16 +21,21 @@ load(
     "bigtable_client_integration_tests",
 )
 
-[cc_binary(
+[cc_test(
     name = test.replace("/", "_").replace(".cc", ""),
+    timeout = "long",
     srcs = [test],
+    tags = [
+        "bigtable-integration-tests",
+        "integration-tests",
+    ],
     deps = [
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
         "//google/cloud/bigtable:bigtable_client",
         "//google/cloud/bigtable:bigtable_client_testing",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_grpc_utils",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "@com_google_googletest//:gtest_main",
     ],
 ) for test in bigtable_client_integration_tests]
 

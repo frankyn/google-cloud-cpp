@@ -14,54 +14,98 @@
 # limitations under the License.
 # ~~~
 
-# While it is tempting create these targets using a function or a loop, we want
-# to keep this particular file as simple as possible, as it is intended to be
-# part of the examples.
+add_library(bigtable_examples_common bigtable_examples_common.cc
+                                     bigtable_examples_common.h)
+target_link_libraries(
+    bigtable_examples_common
+    bigtable_client
+    bigtable_protos
+    google_cloud_cpp_common
+    google_cloud_cpp_grpc_utils
+    gRPC::grpc++
+    gRPC::grpc
+    protobuf::libprotobuf
+    bigtable_common_options)
 
-add_executable(bigtable_hello_table_admin bigtable_hello_table_admin.cc)
-target_link_libraries(bigtable_hello_table_admin bigtable_client
-                      bigtable_common_options)
+set(bigtable_examples
+    # cmake-format: sort
+    bigtable_grpc_credentials.cc
+    bigtable_hello_app_profile.cc
+    bigtable_hello_instance_admin.cc
+    bigtable_hello_table_admin.cc
+    bigtable_hello_world.cc
+    bigtable_instance_admin_snippets.cc
+    data_async_snippets.cc
+    data_snippets.cc
+    instance_admin_async_snippets.cc
+    table_admin_async_snippets.cc
+    table_admin_iam_policy_snippets.cc
+    table_admin_snippets.cc)
 
-add_executable(bigtable_hello_instance_admin bigtable_hello_instance_admin.cc)
-target_link_libraries(bigtable_hello_instance_admin bigtable_client
-                      bigtable_common_options)
+set(bigtable_examples_unit_tests # cmake-format: sort
+                                 bigtable_examples_common_test.cc)
 
-add_executable(bigtable_hello_world bigtable_hello_world.cc)
-target_link_libraries(bigtable_hello_world bigtable_client
-                      bigtable_common_options)
+include(CreateBazelConfig)
+export_list_to_bazel("bigtable_examples.bzl" "bigtable_examples")
+export_list_to_bazel("bigtable_examples_unit_tests.bzl"
+                     "bigtable_examples_unit_tests")
+create_bazel_config(bigtable_examples_common)
 
-add_executable(bigtable_hello_app_profile bigtable_hello_app_profile.cc)
-target_link_libraries(bigtable_hello_app_profile bigtable_client
-                      bigtable_common_options)
+if (BUILD_TESTING)
+    foreach (fname ${bigtable_examples_unit_tests})
+        string(REPLACE "/" "_" basename ${fname})
+        string(REPLACE ".cc" "" basename ${basename})
+        set(target "bigtable_examples_${basename}")
+        add_executable(${target} ${fname})
+        set_target_properties(${target} PROPERTIES OUTPUT_NAME ${basename})
+        target_link_libraries(
+            ${target}
+            PRIVATE bigtable_examples_common
+                    bigtable_client
+                    bigtable_protos
+                    google_cloud_cpp_testing
+                    google_cloud_cpp_common
+                    google_cloud_cpp_grpc_utils
+                    GTest::gmock_main
+                    GTest::gmock
+                    GTest::gtest
+                    gRPC::grpc++
+                    gRPC::grpc
+                    protobuf::libprotobuf
+                    bigtable_common_options)
+        add_test(NAME ${target} COMMAND ${target})
+    endforeach ()
+endif ()
 
-add_executable(bigtable_quickstart bigtable_quickstart.cc)
-target_link_libraries(bigtable_quickstart bigtable_client
-                      bigtable_common_options)
+foreach (fname ${bigtable_examples})
+    string(REPLACE "/" "_" target ${fname})
+    string(REPLACE ".cc" "" target ${target})
+    add_executable(${target} ${fname})
+    target_link_libraries(
+        ${target}
+        PRIVATE bigtable_examples_common
+                bigtable_client
+                bigtable_protos
+                google_cloud_cpp_common
+                google_cloud_cpp_grpc_utils
+                gRPC::grpc++
+                gRPC::grpc
+                protobuf::libprotobuf
+                bigtable_common_options)
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES LABELS "integration-tests")
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;bigtable-integration-tests")
+endforeach ()
 
-add_executable(bigtable_instance_admin_snippets
-               bigtable_instance_admin_snippets.cc)
-target_link_libraries(bigtable_instance_admin_snippets bigtable_client
-                      bigtable_common_options)
+# We just know that these tests need to be run against production.
+set(bigtable_examples_production
+    # cmake-format: sort
+    bigtable_grpc_credentials table_admin_iam_policy_snippets)
 
-add_executable(instance_admin_async_snippets instance_admin_async_snippets.cc)
-target_link_libraries(instance_admin_async_snippets bigtable_client
-                      bigtable_common_options)
-
-add_executable(table_admin_async_snippets table_admin_async_snippets.cc)
-target_link_libraries(table_admin_async_snippets bigtable_client
-                      bigtable_common_options)
-
-add_executable(table_admin_snippets table_admin_snippets.cc)
-target_link_libraries(table_admin_snippets bigtable_client
-                      bigtable_common_options)
-
-add_executable(data_snippets data_snippets.cc)
-target_link_libraries(data_snippets bigtable_client bigtable_common_options)
-
-add_executable(data_async_snippets data_async_snippets.cc)
-target_link_libraries(data_async_snippets bigtable_client
-                      bigtable_common_options)
-
-add_executable(bigtable_grpc_credentials bigtable_grpc_credentials.cc)
-target_link_libraries(bigtable_grpc_credentials bigtable_client
-                      bigtable_common_options)
+foreach (target ${bigtable_examples_production})
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;integration-tests-no-emulator")
+endforeach ()

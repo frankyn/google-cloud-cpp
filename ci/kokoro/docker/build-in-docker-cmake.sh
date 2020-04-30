@@ -32,27 +32,48 @@ if [[ -z "${PROJECT_ROOT+x}" ]]; then
 fi
 source "${PROJECT_ROOT}/ci/colors.sh"
 
+echo
+log_yellow "Starting docker build with ${NCPU} cores"
+echo
+
 # Run the configure / compile / test cycle inside a docker image.
 # This script is designed to work in the context created by the
 # ci/Dockerfile.* build scripts.
 
-(cd "${PROJECT_ROOT}" ; ./ci/check-style.sh)
+echo "================================================================"
+log_yellow "Verify formatting"
+(
+  cd "${PROJECT_ROOT}"
+  ./ci/check-style.sh
+)
 
-CMAKE_COMMAND="cmake"
-if [[ "${SCAN_BUILD}" == "yes" ]]; then
-  CMAKE_COMMAND="scan-build --use-cc=${CC} --use-c++=${CXX} cmake"
+echo "================================================================"
+log_yellow "Verify markdown"
+(
+  cd "${PROJECT_ROOT}"
+  ./ci/check-markdown.sh
+)
+
+if command -v ccache; then
+  echo "================================================================"
+  log_yellow "ccache stats"
+  ccache --show-stats
+  ccache --zero-stats
 fi
 
-echo
-echo "${COLOR_YELLOW}Starting docker build $(date) with ${NCPU}"\
-    "cores${COLOR_RESET}"
-echo
+echo "================================================================"
+log_yellow "Configure CMake"
 
-echo "${COLOR_YELLOW}Started CMake config at: $(date)${COLOR_RESET}"
+CMAKE_COMMAND="cmake"
+
 # Extra flags to pass to CMake based on our build configurations.
 declare -a cmake_extra_flags
 if [[ "${BUILD_TESTING:-}" == "no" ]]; then
-  cmake_extra_flags+=( "-DBUILD_TESTING=OFF" )
+  cmake_extra_flags+=("-DBUILD_TESTING=OFF")
+fi
+
+if [[ "${CLANG_TIDY:-}" = "yes" ]]; then
+  cmake_extra_flags+=("-DGOOGLE_CLOUD_CPP_CLANG_TIDY=yes")
 fi
 
 if [[ "${GOOGLE_CLOUD_CPP_CXX_STANDARD:-}" != "" ]]; then
@@ -61,25 +82,21 @@ if [[ "${GOOGLE_CLOUD_CPP_CXX_STANDARD:-}" != "" ]]; then
 fi
 
 if [[ "${TEST_INSTALL:-}" == "yes" ]]; then
-  cmake_extra_flags+=( "-DCMAKE_INSTALL_PREFIX=/var/tmp/staging" )
-fi
-
-if [[ "${SCAN_BUILD:-}" == "yes" ]]; then
-  cmake_extra_flags+=( "-DGOOGLE_CLOUD_CPP_ENABLE_CCACHE=OFF" )
+  cmake_extra_flags+=("-DCMAKE_INSTALL_PREFIX=/var/tmp/staging")
 fi
 
 if [[ "${USE_LIBCXX:-}" == "yes" ]]; then
-  cmake_extra_flags+=( "-DGOOGLE_CLOUD_CPP_USE_LIBCXX=ON" )
+  cmake_extra_flags+=("-DGOOGLE_CLOUD_CPP_USE_LIBCXX=ON")
 fi
 
 if [[ "${USE_NINJA:-}" == "yes" ]]; then
-  cmake_extra_flags+=( "-GNinja" )
+  cmake_extra_flags+=("-GNinja")
 fi
 
 if [[ "${BUILD_NAME:-}" == "publish-refdocs" ]]; then
-  cmake_extra_flags+=( "-DGOOGLE_CLOUD_CPP_GEN_DOCS_FOR_GOOGLEAPIS_DEV=on" )
+  cmake_extra_flags+=("-DGOOGLE_CLOUD_CPP_GEN_DOCS_FOR_GOOGLEAPIS_DEV=on")
   if [[ "${BRANCH:-}" == "master" ]]; then
-    cmake_extra_flags+=( "-DGOOGLE_CLOUD_CPP_USE_MASTER_FOR_REFDOC_LINKS=on" )
+    cmake_extra_flags+=("-DGOOGLE_CLOUD_CPP_USE_MASTER_FOR_REFDOC_LINKS=on")
   fi
 fi
 
@@ -90,55 +107,31 @@ fi
 # to expand as separate arguments.
 # shellcheck disable=SC2086
 ${CMAKE_COMMAND} \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    "-DGOOGLE_CLOUD_CPP_ENABLE_CCACHE=OFF" \
-    "${cmake_extra_flags[@]+"${cmake_extra_flags[@]}"}" \
-    ${CMAKE_FLAGS:-} \
-    "-H${SOURCE_DIR}" \
-    "-B${BINARY_DIR}"
+  -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+  "${cmake_extra_flags[@]+"${cmake_extra_flags[@]}"}" \
+  ${CMAKE_FLAGS:-} \
+  "-H${SOURCE_DIR}" \
+  "-B${BINARY_DIR}"
 echo
-echo "${COLOR_YELLOW}Finished CMake config at: $(date)${COLOR_RESET}"
+log_yellow "Finished CMake config"
 
-# CMake can generate dependency graphs, which are useful to understand and
-# troubleshoot dependencies.
-if [[ "${CREATE_GRAPHVIZ:-}" == "yes" ]]; then
-  ${CMAKE_COMMAND} \
-      --graphviz="${BINARY_DIR}/graphviz/google-cloud-cpp" \
-      --build "${BINARY_DIR}"
-fi
-
-# If scan-build is enabled we build the smallest subset of things that is
-# needed; otherwise, we pick errors from things we do not care about. With
-# scan-build disabled we compile everything, to test the build as most
-# developers will experience it.
-echo "${COLOR_YELLOW}Started build at: $(date)${COLOR_RESET}"
+echo "================================================================"
+log_yellow "started build"
 ${CMAKE_COMMAND} --build "${BINARY_DIR}" -- -j "${NCPU}"
-echo "${COLOR_YELLOW}Finished build at: $(date)${COLOR_RESET}"
+log_yellow "finished build"
 
-# Collect the output from the Clang static analyzer and provide instructions to
-# the developers on how to do that locally.
-if [[ "${SCAN_BUILD:-}" = "yes" ]]; then
-  if [[ -n "$(ls -1d /tmp/scan-build-* 2>/dev/null)" ]]; then
-    cp -r /tmp/scan-build-* /v/scan-cmake-out
-  fi
-  if [[ -r scan-cmake-out/index.html ]]; then
-    cat <<_EOF_;
+TEST_JOB_COUNT="${NCPU}"
+if [[ "${BUILD_TYPE}" == "Coverage" ]]; then
+  # The code coverage build cannot run the tests in parallel. Some of the files
+  # where the code coverage is recorded are shared and not protected by locks
+  # of any kind.
+  TEST_JOB_COUNT=1
+fi
+readonly TEST_JOB_COUNT
 
-${COLOR_RED}
-scan-build detected errors.  Please read the log for details. To
-run scan-build locally and examine the HTML output install and configure Docker,
-then run:
-
-./ci/kokoro/docker/build.sh scan-build
-
-The HTML output will be copied into the scan-cmake-out subdirectory.
-${COLOR_RESET}
-_EOF_
-    exit 1
-  else
-    echo
-    echo "${COLOR_GREEN}scan-build completed without errors.${COLOR_RESET}"
-  fi
+ctest_args=("--output-on-failure" "-j" "${TEST_JOB_COUNT}")
+if [[ -n "${RUNS_PER_TEST}" ]]; then
+  ctest_args+=("--repeat-until-fail" "${RUNS_PER_TEST}")
 fi
 
 if [[ "${BUILD_TESTING:-}" = "yes" ]]; then
@@ -149,64 +142,169 @@ if [[ "${BUILD_TESTING:-}" = "yes" ]]; then
     # It is Okay to skip the tests in this case because the super build
     # automatically runs them.
     echo
-    echo "${COLOR_YELLOW}Running unit tests $(date)${COLOR_RESET}"
+    log_yellow "Running unit tests"
     echo
-    (cd "${BINARY_DIR}" && ctest --output-on-failure)
+    (cd "${BINARY_DIR}" && ctest "-LE" "integration-tests" "${ctest_args[@]}")
 
     echo
-    echo "${COLOR_YELLOW}Completed unit tests $(date)${COLOR_RESET}"
+    log_yellow "Completed unit tests"
     echo
   fi
 
   if [[ "${RUN_INTEGRATION_TESTS:-}" != "no" ]]; then
-    echo
-    echo "${COLOR_YELLOW}Running integration tests $(date)${COLOR_RESET}"
-    echo
-
-    # Run the integration tests. Not all projects have them, so just iterate over
-    # the ones that do.
-    for subdir in google/cloud google/cloud/bigtable google/cloud/storage; do
+    readonly EMULATOR_SCRIPT="run_integration_tests_emulator_cmake.sh"
+    # TODO(#441) - remove the for loops below.
+    # Sometimes the integration tests manage to crash the Bigtable emulator.
+    # Manually restarting the build clears up the problem, but that is just a
+    # waste of everybody's time. Use a (short) timeout to run the test and try
+    # 3 times.
+    set +e
+    success=no
+    for attempt in 1 2 3; do
       echo
-      echo "${COLOR_GREEN}Running integration tests for ${subdir}${COLOR_RESET}"
-      (cd "${BINARY_DIR}" && \
-          "${PROJECT_ROOT}/${subdir}/ci/run_integration_tests.sh")
+      log_yellow "running bigtable integration tests via CTest [${attempt}]"
+      echo
+      # TODO(#441) - when the emulator crashes the tests can take a long time.
+      # The slowest test normally finishes in about 6 seconds, 60 seems safe.
+      if "${PROJECT_ROOT}/google/cloud/bigtable/ci/${EMULATOR_SCRIPT}" \
+        "${BINARY_DIR}" "${ctest_args[@]}" --timeout 60; then
+        success=yes
+        break
+      fi
     done
+    if [[ "${success}" != "yes" ]]; then
+      log_red "integration tests failed multiple times, aborting tests."
+      exit 1
+    fi
+    set -e
+    echo
+    log_yellow "running storage integration tests via CTest [${attempt}]"
+    echo
+    "${PROJECT_ROOT}/google/cloud/storage/ci/${EMULATOR_SCRIPT}" \
+      "${BINARY_DIR}" "${ctest_args[@]}"
+  fi
 
-    echo
-    echo "${COLOR_YELLOW}Completed integration tests $(date)${COLOR_RESET}"
-    echo
+  readonly INTEGRATION_TESTS_CONFIG="${PROJECT_ROOT}/ci/etc/integration-tests-config.sh"
+  readonly GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_JSON="/c/kokoro-run-key.json"
+  readonly GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_P12="/c/kokoro-run-key.p12"
+  readonly GOOGLE_APPLICATION_CREDENTIALS="/c/kokoro-run-key.json"
+
+  should_run_integration_tests() {
+    if [[ "${SOURCE_DIR:-}" == "super" ]]; then
+      # super builds cannot run the integration tests
+      return 1
+    elif [[ "${RUN_INTEGRATION_TESTS:-}" == "yes" ]]; then
+      # yes: always try to run the integration tests
+      return 0
+    elif [[ "${RUN_INTEGRATION_TESTS:-}" == "auto" ]]; then
+      # auto: only try to run integration tests if the config files are present
+      if [[ -r "${INTEGRATION_TESTS_CONFIG}" && -r \
+        "${GOOGLE_APPLICATION_CREDENTIALS}" && -r \
+        "${GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_JSON}" && -r \
+        "${GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_P12}" ]]; then
+        return 0
+      fi
+    fi
+    return 1
+  }
+
+  if should_run_integration_tests; then
+    echo "================================================================"
+    log_yellow "Running the integration tests against production"
+
+    # shellcheck disable=SC1091
+    source "${INTEGRATION_TESTS_CONFIG}"
+    export GOOGLE_APPLICATION_CREDENTIALS
+    export GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_JSON
+    export GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_P12
+    export GOOGLE_CLOUD_CPP_AUTO_RUN_EXAMPLES="yes"
+
+    # Changing the PATH disables the Bazel cache, so use an absolute path.
+    readonly GCLOUD="/usr/local/google-cloud-sdk/bin/gcloud"
+    source "${PROJECT_ROOT}/ci/kokoro/gcloud-functions.sh"
+
+    trap delete_gcloud_config EXIT
+    create_gcloud_config
+    activate_service_account_keyfile "${GOOGLE_APPLICATION_CREDENTIALS}"
+
+    trap cleanup_gcloud EXIT
+    cleanup_gcloud() {
+      set +e
+      echo
+      echo "================================================================"
+      log_yellow "Performing cleanup actions."
+      # This is normally revoked manually, but in case we exit before that point
+      # we try again, ignore any errors.
+      revoke_service_account_keyfile "${GOOGLE_APPLICATION_CREDENTIALS}" >/dev/null 2>&1
+
+      delete_gcloud_config
+      log_yellow "Cleanup actions completed."
+      echo "================================================================"
+      echo
+      set -e
+    }
+
+    # This is used in a Bigtable example showing how to use access tokens to
+    # create a grpc::Credentials object. Even though the account is deactivated
+    # for use by `gcloud` the token remains valid for about 1 hour.
+    GOOGLE_CLOUD_CPP_BIGTABLE_TEST_ACCESS_TOKEN="$(
+      "${GCLOUD}" "${GCLOUD_ARGS[@]}" auth print-access-token
+    )"
+    export GOOGLE_CLOUD_CPP_BIGTABLE_TEST_ACCESS_TOKEN
+    readonly GOOGLE_CLOUD_CPP_BIGTABLE_TEST_ACCESS_TOKEN
+
+    # Deactivate the recently activated service accounts to prevent accidents.
+    log_normal "Revoke service account after creating the access token."
+    revoke_service_account_keyfile "${GOOGLE_APPLICATION_CREDENTIALS}"
+
+    # Since we already run multiple integration tests against the emulator we
+    # only need to run the tests here that cannot use the emulator. Some
+    # libraries will tag all their tests as "integration-tests-no-emulator",
+    # that is fine too. As long as we do not repeat all the tests we are
+    # winning.
+    env -C "${BINARY_DIR}" ctest \
+      -L integration-tests-no-emulator "${ctest_args[@]}"
+
+    echo "================================================================"
+    log_yellow "Completed the integration tests against production"
   fi
 fi
 
 # Test the install rule and that the installation works.
 if [[ "${TEST_INSTALL:-}" = "yes" ]]; then
   echo
-  echo "${COLOR_YELLOW}Testing install rule.${COLOR_RESET}"
+  log_yellow "testing install rule"
   cmake --build "${BINARY_DIR}" --target install
 
   # Also verify that the install directory does not get unexpected files or
   # directories installed.
   echo
-  echo "${COLOR_YELLOW}Verify installed headers created only expected" \
-      "directories.${COLOR_RESET}"
+  log_yellow "Verify installed headers created only expected directories."
   if comm -23 \
-      <(find /var/tmp/staging/include/google/cloud -type d | sort) \
-      <(echo /var/tmp/staging/include/google/cloud ; \
-        echo /var/tmp/staging/include/google/cloud/bigtable ; \
-        echo /var/tmp/staging/include/google/cloud/bigtable/internal ; \
-        echo /var/tmp/staging/include/google/cloud/firestore ; \
-        echo /var/tmp/staging/include/google/cloud/storage ; \
-        echo /var/tmp/staging/include/google/cloud/storage/internal ; \
-        echo /var/tmp/staging/include/google/cloud/storage/oauth2 ; \
-        echo /var/tmp/staging/include/google/cloud/storage/testing ; \
-        /bin/true) | grep -q /var/tmp; then
-      echo "${COLOR_YELLOW}Installed directories do not match" \
-          "expectation.${COLOR_RESET}"
-      echo "${COLOR_RED}Found:"
-      find /var/tmp/staging/include/google/cloud -type d | sort
-      echo "${COLOR_RESET}"
-      /bin/false
-   fi
+    <(find /var/tmp/staging/include/google/cloud -type d | sort) \
+    <(
+      echo /var/tmp/staging/include/google/cloud
+      echo /var/tmp/staging/include/google/cloud/bigquery
+      echo /var/tmp/staging/include/google/cloud/bigquery/internal
+      echo /var/tmp/staging/include/google/cloud/bigtable
+      echo /var/tmp/staging/include/google/cloud/bigtable/internal
+      echo /var/tmp/staging/include/google/cloud/firestore
+      echo /var/tmp/staging/include/google/cloud/grpc_utils
+      echo /var/tmp/staging/include/google/cloud/internal
+      echo /var/tmp/staging/include/google/cloud/pubsub
+      echo /var/tmp/staging/include/google/cloud/pubsub/internal
+      echo /var/tmp/staging/include/google/cloud/storage
+      echo /var/tmp/staging/include/google/cloud/storage/internal
+      echo /var/tmp/staging/include/google/cloud/storage/oauth2
+      echo /var/tmp/staging/include/google/cloud/storage/testing
+      echo /var/tmp/staging/include/google/cloud/testing_util
+      /bin/true
+    ) | grep -q /var/tmp; then
+    log_red "Installed directories do not match expectation."
+    echo "Found:"
+    find /var/tmp/staging/include/google/cloud -type d | sort
+    /bin/false
+  fi
 
   # Checking the ABI requires installation, so this is the first opportunity to
   # run the check.
@@ -218,7 +316,13 @@ fi
 # If document generation is enabled, run it now.
 if [[ "${GENERATE_DOCS}" == "yes" ]]; then
   echo
-  echo "${COLOR_YELLOW}Generating Doxygen documentation at:" \
-      "$(date).${COLOR_RESET}"
+  log_yellow "Generating Doxygen documentation"
   cmake --build "${BINARY_DIR}" --target doxygen-docs -- -j "${NCPU}"
+fi
+
+if command -v ccache; then
+  echo "================================================================"
+  log_yellow "ccache stats"
+  ccache --show-stats
+  ccache --zero-stats
 fi

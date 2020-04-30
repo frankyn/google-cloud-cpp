@@ -15,9 +15,9 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_TESTING_STORAGE_INTEGRATION_TEST_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_TESTING_STORAGE_INTEGRATION_TEST_H
 
-#include "google/cloud/internal/random.h"
 #include "google/cloud/storage/client.h"
 #include "google/cloud/storage/well_known_headers.h"
+#include "google/cloud/internal/random.h"
 #include <gmock/gmock.h>
 #include <string>
 #include <vector>
@@ -31,22 +31,22 @@ namespace testing {
  */
 class StorageIntegrationTest : public ::testing::Test {
  protected:
-  google::cloud::StatusOr<google::cloud::storage::Client>
+  static google::cloud::StatusOr<google::cloud::storage::Client>
   MakeIntegrationTestClient();
 
-  google::cloud::StatusOr<google::cloud::storage::Client>
+  static google::cloud::StatusOr<google::cloud::storage::Client>
   MakeIntegrationTestClient(std::unique_ptr<RetryPolicy> retry_policy);
 
-  std::unique_ptr<BackoffPolicy> TestBackoffPolicy();
-  std::unique_ptr<RetryPolicy> TestRetryPolicy();
-
-  std::string MakeRandomObjectName();
-
-  std::string LoremIpsum() const;
-
-  EncryptionKeyData MakeEncryptionKeyData();
+  static std::unique_ptr<BackoffPolicy> TestBackoffPolicy();
+  static std::unique_ptr<RetryPolicy> TestRetryPolicy();
 
   std::string MakeRandomBucketName();
+  std::string MakeRandomObjectName();
+  std::string MakeRandomFilename();
+
+  static std::string LoremIpsum();
+
+  EncryptionKeyData MakeEncryptionKeyData();
 
   static constexpr int kDefaultRandomLineCount = 1000;
   static constexpr int kDefaultLineSize = 200;
@@ -57,7 +57,7 @@ class StorageIntegrationTest : public ::testing::Test {
 
   std::string MakeRandomData(std::size_t desired_size);
 
-  bool UsingTestbench() const;
+  static bool UsingTestbench();
 
   google::cloud::internal::DefaultPRNG generator_ =
       google::cloud::internal::MakeDefaultPRNG();
@@ -74,11 +74,12 @@ class StorageIntegrationTest : public ::testing::Test {
 template <typename Callable>
 void TestPermanentFailure(Callable&& callable) {
 #if GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS
-  EXPECT_THROW(try { callable(); } catch (std::runtime_error const& ex) {
-    EXPECT_THAT(ex.what(), ::testing::HasSubstr("Permanent error in"));
-    throw;
-  },
-               std::runtime_error);
+  EXPECT_THROW(
+      try { callable(); } catch (std::runtime_error const& ex) {
+        EXPECT_THAT(ex.what(), ::testing::HasSubstr("Permanent error in"));
+        throw;
+      },
+      std::runtime_error);
 #else
   EXPECT_DEATH_IF_SUPPORTED(callable(), "");
 #endif  // GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS

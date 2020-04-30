@@ -13,9 +13,9 @@
 // limitations under the License.
 
 #include "google/cloud/storage/internal/signed_url_requests.h"
-#include "google/cloud/internal/format_time_point.h"
 #include "google/cloud/storage/internal/curl_handle.h"
 #include "google/cloud/storage/internal/sha256_hash.h"
+#include "google/cloud/internal/format_time_point.h"
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -125,8 +125,8 @@ std::string QueryStringFromParameters(
 std::string TrimHeaderValue(std::string const& value) {
   std::string tmp = value;
   // Heasder values need to be normalized for spaces, whitespaces and tabs
-  std::replace_if(tmp.begin(), tmp.end(),
-                  [](char c) { return std::isspace(c); }, ' ');
+  std::replace_if(
+      tmp.begin(), tmp.end(), [](char c) { return std::isspace(c); }, ' ');
   tmp.erase(0, tmp.find_first_not_of(' '));
   tmp = tmp.substr(0, tmp.find_last_not_of(' ') + 1);
   auto end = std::unique(tmp.begin(), tmp.end(),
@@ -139,8 +139,27 @@ std::string TrimHeaderValue(std::string const& value) {
 void V4SignUrlRequest::AddMissingRequiredHeaders() {
   auto const& headers = common_request_.extension_headers();
   if (headers.find("host") == headers.end()) {
-    SetOption(AddExtensionHeader("host", "storage.googleapis.com"));
+    SetOption(AddExtensionHeader("host", Hostname()));
   }
+}
+
+void V4SignUrlRequest::SetOption(VirtualHostname const& hostname) {
+  virtual_host_name_ = hostname.has_value() && hostname.value();
+}
+
+void V4SignUrlRequest::SetOption(BucketBoundHostname const& o) {
+  if (!o.has_value()) {
+    domain_named_bucket_.reset();
+    return;
+  }
+  domain_named_bucket_ = o.value();
+}
+
+void V4SignUrlRequest::SetOption(Scheme const& o) {
+  if (!o.has_value()) {
+    return;
+  }
+  scheme_ = o.value();
 }
 
 std::string V4SignUrlRequest::CanonicalQueryString(
@@ -157,7 +176,9 @@ std::string V4SignUrlRequest::CanonicalRequest(
 
   os << verb() << "\n";
   CurlHandle curl;
-  os << '/' << bucket_name();
+  if (!SkipBucketInPath()) {
+    os << '/' << bucket_name();
+  }
   for (auto& part : ObjectNameParts()) {
     os << '/' << curl.MakeEscapedString(part).get();
   }
@@ -183,6 +204,49 @@ std::string V4SignUrlRequest::StringToSign(std::string const& client_id) const {
   return "GOOG4-RSA-SHA256\n" +
          google::cloud::internal::FormatV4SignedUrlTimestamp(timestamp_) +
          "\n" + Scope() + "\n" + CanonicalRequestHash(client_id);
+}
+
+Status V4SignUrlRequest::Validate() {
+  if (virtual_host_name_ && domain_named_bucket_) {
+    return Status(StatusCode::kInvalidArgument,
+                  "VirtualHostname and BucketBoundHostname cannot be specified "
+                  "simultaneously");
+  }
+  auto const& headers = common_request_.extension_headers();
+  auto host_it = headers.find("host");
+  if (host_it == headers.end()) {
+    return Status();
+  }
+  if (virtual_host_name_ && host_it->second != Hostname()) {
+    return Status(StatusCode::kInvalidArgument,
+                  "specified 'host' (" + host_it->second +
+                      ") header stands in conflict with "
+                      "'VirtualHostname' option.");
+  }
+  if (domain_named_bucket_ && host_it->second != *domain_named_bucket_) {
+    return Status(StatusCode::kInvalidArgument,
+                  "specified 'host' (" + host_it->second +
+                      ") doesn't match domain specified in the "
+                      "'BucketBoundHostname' option (" +
+                      *domain_named_bucket_ + ").");
+  }
+  return Status();
+}
+
+std::string V4SignUrlRequest::Hostname() {
+  if (virtual_host_name_) {
+    return common_request_.bucket_name() + ".storage.googleapis.com";
+  }
+  if (domain_named_bucket_) {
+    return *domain_named_bucket_;
+  }
+  return "storage.googleapis.com";
+}
+
+std::string V4SignUrlRequest::HostnameWithBucket() {
+  return scheme_ + "://" + Hostname() +
+         (SkipBucketInPath() ? std::string()
+                             : ("/" + common_request_.bucket_name()));
 }
 
 std::chrono::system_clock::time_point V4SignUrlRequest::DefaultTimestamp() {

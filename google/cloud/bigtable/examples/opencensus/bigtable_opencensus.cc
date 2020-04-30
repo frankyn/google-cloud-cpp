@@ -14,11 +14,8 @@
 
 //! [all code]
 
-//! [bigtable includes]
 #include "google/cloud/bigtable/table.h"
 #include "google/cloud/bigtable/table_admin.h"
-//! [bigtable includes]
-
 #include "opencensus/exporters/stats/stackdriver/stackdriver_exporter.h"
 #include "opencensus/exporters/stats/stdout/stdout_exporter.h"
 #include "opencensus/exporters/trace/stackdriver/stackdriver_exporter.h"
@@ -127,9 +124,7 @@ int main(int argc, char* argv[]) try {
         table.Apply(google::cloud::bigtable::SingleRowMutation(
             std::move(row_key),
             google::cloud::bigtable::SetCell("family", "c0", greeting)));
-    if (!status.ok()) {
-      throw std::runtime_error(status.message());
-    }
+    if (!status.ok()) throw std::runtime_error(status.message());
     ++i;
   }
   //! [write rows]
@@ -139,9 +134,7 @@ int main(int argc, char* argv[]) try {
   auto result = table.ReadRow(
       "key-0",
       google::cloud::bigtable::Filter::ColumnRangeClosed("family", "c0", "c0"));
-  if (!result) {
-    throw std::runtime_error(result.status().message());
-  }
+  if (!result) throw std::runtime_error(result.status().message());
   if (!result->first) {
     std::cout << "Cannot find row 'key-0' in the table: " << table.table_name()
               << "\n";
@@ -158,9 +151,7 @@ int main(int argc, char* argv[]) try {
   for (auto& row :
        table.ReadRows(google::cloud::bigtable::RowRange::InfiniteRange(),
                       google::cloud::bigtable::Filter::PassAllFilter())) {
-    if (!row) {
-      throw std::runtime_error(row.status().message());
-    }
+    if (!row) throw std::runtime_error(row.status().message());
     std::cout << row->row_key() << ":\n";
     for (auto& cell : row->cells()) {
       std::cout << "\t" << cell.family_name() << ":" << cell.column_qualifier()
@@ -173,9 +164,7 @@ int main(int argc, char* argv[]) try {
   // Delete the table
   //! [delete table]
   google::cloud::Status status = table_admin.DeleteTable(table_id);
-  if (!status.ok()) {
-    throw std::runtime_error(status.message());
-  }
+  if (!status.ok()) throw std::runtime_error(status.message());
   //! [delete table]
 
   // Stop tracing because the remaining RPCs are OpenCensus related.

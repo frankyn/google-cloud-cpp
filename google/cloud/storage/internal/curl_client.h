@@ -15,12 +15,12 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_INTERNAL_CURL_CLIENT_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_INTERNAL_CURL_CLIENT_H
 
-#include "google/cloud/internal/random.h"
 #include "google/cloud/storage/internal/curl_handle_factory.h"
 #include "google/cloud/storage/internal/raw_client.h"
 #include "google/cloud/storage/internal/resumable_upload_session.h"
 #include "google/cloud/storage/oauth2/credentials.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/internal/random.h"
 #include <mutex>
 
 namespace google {
@@ -177,9 +177,6 @@ class CurlClient : public RawClient,
   StatusOr<EmptyResponse> DeleteNotification(
       DeleteNotificationRequest const&) override;
 
-  StatusOr<std::string> AuthorizationHeader(
-      std::shared_ptr<google::cloud::storage::oauth2::Credentials> const&);
-
   void LockShared(curl_lock_data data);
   void UnlockShared(curl_lock_data data);
 
@@ -222,22 +219,9 @@ class CurlClient : public RawClient,
   std::string xml_download_endpoint_;
   std::string iam_endpoint_;
 
-  // These mutexes are used to protect different portions of `share_`.
-  std::mutex mu_share_;
-  std::mutex mu_dns_;
-  std::mutex mu_ssl_session_;
-  std::mutex mu_connect_;
-  std::mutex mu_psl_;
-  CurlShare share_;
-
   std::mutex mu_;
   google::cloud::internal::DefaultPRNG generator_;  // GUARDED_BY(mu_);
 
-  // The factories must be listed *after* the CurlShare. libcurl keeps a
-  // usage count on each CURLSH* handle, which is only released once the CURL*
-  // handle is *closed*. So we want the order of destruction to be (1)
-  // factories, as that will delete all the CURL* handles, and then (2) CURLSH*.
-  // To guarantee this order just list the members in the opposite order.
   std::shared_ptr<CurlHandleFactory> storage_factory_;
   std::shared_ptr<CurlHandleFactory> upload_factory_;
   std::shared_ptr<CurlHandleFactory> xml_upload_factory_;

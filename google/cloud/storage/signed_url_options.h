@@ -208,6 +208,66 @@ struct SigningAccountDelegates
   SigningAccountDelegates() = default;
   static char const* name() { return "signing-account-delegates"; }
 };
+
+/**
+ * Indicate that the bucket should be a part of hostname in the URL.
+ *
+ * If this option is set, the resultin
+ * 'https://mybucket.storage.googleapis.com'
+ */
+struct VirtualHostname : public internal::ComplexOption<VirtualHostname, bool> {
+  using ComplexOption<VirtualHostname, bool>::ComplexOption;
+  // GCC <= 7.0 does not use the inherited default constructor, redeclare it
+  // explicitly
+  VirtualHostname() = default;
+  char const* option_name() const { return "virtual-hostname"; }
+};
+
+/**
+ * Use domain-named bucket in a V4 signed URL.
+ *
+ * The resulting URL will use the provided domain to address objects like this:
+ * 'https://mydomain.tld/my-object'
+ */
+struct BucketBoundHostname
+    : public internal::ComplexOption<BucketBoundHostname, std::string> {
+  using ComplexOption<BucketBoundHostname, std::string>::ComplexOption;
+  // GCC <= 7.0 does not use the inherited default constructor, redeclare it
+  // explicitly
+  BucketBoundHostname() = default;
+  char const* option_name() const { return "domain-named-bucket"; }
+};
+
+/// Use the specified scheme (e.g. "http") in a V4 signed URL.
+struct Scheme : public internal::ComplexOption<Scheme, std::string> {
+  using ComplexOption<Scheme, std::string>::ComplexOption;
+  // GCC <= 7.0 does not use the inherited default constructor, redeclare it
+  // explicitly
+  Scheme() = default;
+  char const* option_name() const { return "scheme"; }
+};
+
+/**
+ * Add a extension header to a POST policy.
+ */
+struct AddExtensionFieldOption
+    : public internal::ComplexOption<AddExtensionFieldOption,
+                                     std::pair<std::string, std::string>> {
+  using ComplexOption<AddExtensionFieldOption,
+                      std::pair<std::string, std::string>>::ComplexOption;
+  // GCC <= 7.0 does not use the inherited default constructor, redeclare it
+  // explicitly
+  AddExtensionFieldOption() = default;
+  AddExtensionFieldOption(std::string field, std::string value)
+      : ComplexOption(std::make_pair(std::move(field), std::move(value))) {}
+  static char const* name() { return "extension_field"; }
+};
+
+inline AddExtensionFieldOption AddExtensionField(std::string field,
+                                                 std::string value) {
+  return AddExtensionFieldOption(std::move(field), std::move(value));
+}
+
 }  // namespace STORAGE_CLIENT_NS
 }  // namespace storage
 }  // namespace cloud

@@ -13,14 +13,14 @@
 // limitations under the License.
 
 #include "google/cloud/storage/internal/curl_client.h"
-#include "google/cloud/internal/getenv.h"
-#include "google/cloud/internal/make_unique.h"
 #include "google/cloud/storage/internal/curl_request_builder.h"
 #include "google/cloud/storage/internal/curl_resumable_upload_session.h"
 #include "google/cloud/storage/internal/generate_message_boundary.h"
 #include "google/cloud/storage/internal/object_streambuf.h"
 #include "google/cloud/storage/object_stream.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/make_unique.h"
 #include "google/cloud/terminate_handler.h"
 #include <sstream>
 
@@ -31,41 +31,14 @@ inline namespace STORAGE_CLIENT_NS {
 namespace internal {
 namespace {
 
-extern "C" void CurlShareLockCallback(CURL*, curl_lock_data data,
-                                      curl_lock_access, void* userptr) {
-  auto* client = reinterpret_cast<CurlClient*>(userptr);
-  client->LockShared(data);
-}
-
-extern "C" void CurlShareUnlockCallback(CURL*, curl_lock_data data,
-                                        void* userptr) {
-  auto* client = reinterpret_cast<CurlClient*>(userptr);
-  client->UnlockShared(data);
-}
-
 std::shared_ptr<CurlHandleFactory> CreateHandleFactory(
     ClientOptions const& options) {
   if (options.connection_pool_size() == 0) {
-    return std::make_shared<DefaultCurlHandleFactory>();
+    return std::make_shared<DefaultCurlHandleFactory>(
+        options.channel_options());
   }
   return std::make_shared<PooledCurlHandleFactory>(
-      options.connection_pool_size());
-}
-
-std::string XmlMapPredefinedAcl(std::string const& acl) {
-  static std::map<std::string, std::string> mapping{
-      {"authenticatedRead", "authenticated-read"},
-      {"bucketOwnerFullControl", "bucket-owner-full-control"},
-      {"bucketOwnerRead", "bucket-owner-read"},
-      {"private", "private"},
-      {"projectPrivate", "project-private"},
-      {"publicRead", "public-read"},
-  };
-  auto loc = mapping.find(acl);
-  if (loc == mapping.end()) {
-    return acl;
-  }
-  return loc->second;
+      options.connection_pool_size(), options.channel_options());
 }
 
 std::string UrlEscapeString(std::string const& value) {
@@ -78,7 +51,7 @@ StatusOr<ReturnType> ParseFromString(StatusOr<HttpResponse> response) {
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return ReturnType::ParseFromString(response->payload);
@@ -90,7 +63,7 @@ auto CheckedFromString(StatusOr<HttpResponse> response)
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return Parser::FromString(response->payload);
@@ -100,7 +73,7 @@ StatusOr<EmptyResponse> ReturnEmptyResponse(StatusOr<HttpResponse> response) {
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return EmptyResponse{};
@@ -111,7 +84,7 @@ StatusOr<ReturnType> ParseFromHttpResponse(StatusOr<HttpResponse> response) {
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return ReturnType::FromHttpResponse(response->payload);
@@ -121,13 +94,12 @@ StatusOr<ReturnType> ParseFromHttpResponse(StatusOr<HttpResponse> response) {
 
 Status CurlClient::SetupBuilderCommon(CurlRequestBuilder& builder,
                                       char const* method) {
-  auto auth_header = AuthorizationHeader(options_.credentials());
+  auto auth_header = options_.credentials()->AuthorizationHeader();
   if (!auth_header.ok()) {
     return std::move(auth_header).status();
   }
   builder.SetMethod(method)
       .ApplyClientOptions(options_)
-      .SetCurlShare(share_.get())
       .AddHeader(auth_header.value())
       .AddHeader("x-goog-api-client: " + x_goog_api_client());
   return Status();
@@ -236,7 +208,7 @@ CurlClient::CreateResumableSessionGeneric(RequestType const& request) {
   if (!http_response.ok()) {
     return std::move(http_response).status();
   }
-  if (http_response->status_code >= 300) {
+  if (http_response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*http_response);
   }
   auto response =
@@ -256,7 +228,6 @@ CurlClient::CreateResumableSessionGeneric(RequestType const& request) {
 
 CurlClient::CurlClient(ClientOptions options)
     : options_(std::move(options)),
-      share_(curl_share_init(), &curl_share_cleanup),
       generator_(google::cloud::internal::MakeDefaultPRNG()),
       storage_factory_(CreateHandleFactory(options_)),
       upload_factory_(CreateHandleFactory(options_)),
@@ -278,17 +249,6 @@ CurlClient::CurlClient(ClientOptions options)
     xml_download_endpoint_ = "https://storage-download.googleapis.com";
   }
 
-  curl_share_setopt(share_.get(), CURLSHOPT_LOCKFUNC, CurlShareLockCallback);
-  curl_share_setopt(share_.get(), CURLSHOPT_UNLOCKFUNC,
-                    CurlShareUnlockCallback);
-  curl_share_setopt(share_.get(), CURLSHOPT_USERDATA, this);
-  curl_share_setopt(share_.get(), CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
-  curl_share_setopt(share_.get(), CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-  curl_share_setopt(share_.get(), CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-#if LIBCURL_VERSION_NUM >= 0x076100
-  curl_share_setopt(share_.get(), CURLSHOPT_SHARE, CURL_LOCK_DATA_PSL);
-#endif  // LIBCURL_VERSION_NUM
-
   CurlInitializeOnce(options);
 }
 
@@ -307,7 +267,8 @@ StatusOr<ResumableUploadResponse> CurlClient::UploadChunk(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code < 300 || response->status_code == 308) {
+  if (response->status_code < HttpStatusCode::kMinNotSuccess ||
+      response->status_code == HttpStatusCode::kResumeIncomplete) {
     return ResumableUploadResponse::FromHttpResponse(*std::move(response));
   }
   return AsStatus(*response);
@@ -327,7 +288,8 @@ StatusOr<ResumableUploadResponse> CurlClient::QueryResumableUpload(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code < 300 || response->status_code == 308) {
+  if (response->status_code < HttpStatusCode::kMinNotSuccess ||
+      response->status_code == HttpStatusCode::kResumeIncomplete) {
     return ResumableUploadResponse::FromHttpResponse(*std::move(response));
   }
   return AsStatus(*response);
@@ -425,7 +387,7 @@ StatusOr<IamPolicy> CurlClient::GetBucketIamPolicy(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return ParseIamPolicyFromString(response->payload);
@@ -444,7 +406,7 @@ StatusOr<NativeIamPolicy> CurlClient::GetNativeBucketIamPolicy(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return NativeIamPolicy::CreateFromJson(response->payload);
@@ -464,7 +426,7 @@ StatusOr<IamPolicy> CurlClient::SetBucketIamPolicy(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return ParseIamPolicyFromString(response->payload);
@@ -484,7 +446,7 @@ StatusOr<NativeIamPolicy> CurlClient::SetNativeBucketIamPolicy(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return NativeIamPolicy::CreateFromJson(response->payload);
@@ -506,7 +468,7 @@ StatusOr<TestBucketIamPermissionsResponse> CurlClient::TestBucketIamPermissions(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return TestBucketIamPermissionsResponse::FromHttpResponse(response->payload);
@@ -715,7 +677,7 @@ StatusOr<RewriteObjectResponse> CurlClient::RewriteObject(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   // This one does not use the common "ParseFromHttpResponse" function because
@@ -753,7 +715,7 @@ StatusOr<ListBucketAclResponse> CurlClient::ListBucketAcl(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
   return internal::ListBucketAclResponse::FromHttpResponse(response->payload);
@@ -1184,64 +1146,6 @@ StatusOr<EmptyResponse> CurlClient::DeleteNotification(
   return ReturnEmptyResponse(builder.BuildRequest().MakeRequest(std::string{}));
 }
 
-void CurlClient::LockShared(curl_lock_data data) {
-  switch (data) {
-    case CURL_LOCK_DATA_SHARE:
-      mu_share_.lock();
-      return;
-    case CURL_LOCK_DATA_DNS:
-      mu_dns_.lock();
-      return;
-    case CURL_LOCK_DATA_SSL_SESSION:
-      mu_ssl_session_.lock();
-      return;
-    case CURL_LOCK_DATA_CONNECT:
-      mu_connect_.lock();
-      return;
-#if LIBCURL_VERSION_NUM >= 0x076100
-    case CURL_LOCK_DATA_PSL:
-      mu_psl_.lock();
-      return;
-#endif  // LIBCURL_VERSION_NUM
-    default:
-      // We use a default because different versions of libcurl have different
-      // values in the `curl_lock_data` enum.
-      break;
-  }
-  std::ostringstream os;
-  os << __func__ << "() - invalid or unknown data argument=" << data;
-  google::cloud::Terminate(os.str().c_str());
-}
-
-void CurlClient::UnlockShared(curl_lock_data data) {
-  switch (data) {
-    case CURL_LOCK_DATA_SHARE:
-      mu_share_.unlock();
-      return;
-    case CURL_LOCK_DATA_DNS:
-      mu_dns_.unlock();
-      return;
-    case CURL_LOCK_DATA_SSL_SESSION:
-      mu_ssl_session_.unlock();
-      return;
-    case CURL_LOCK_DATA_CONNECT:
-      mu_connect_.unlock();
-      return;
-#if LIBCURL_VERSION_NUM >= 0x076100
-    case CURL_LOCK_DATA_PSL:
-      mu_psl_.unlock();
-      return;
-#endif  // LIBCURL_VERSION_NUM
-    default:
-      // We use a default because different versions of libcurl have different
-      // values in the `curl_lock_data` enum.
-      break;
-  }
-  std::ostringstream os;
-  os << __func__ << "() - invalid or unknown data argument=" << data;
-  google::cloud::Terminate(os.str().c_str());
-}
-
 StatusOr<ObjectMetadata> CurlClient::InsertObjectMediaXml(
     InsertObjectMediaRequest const& request) {
   CurlRequestBuilder builder(xml_upload_endpoint_ + "/" +
@@ -1297,9 +1201,8 @@ StatusOr<ObjectMetadata> CurlClient::InsertObjectMediaXml(
                       ComputeCrc32cChecksum(request.contents()));
   }
   if (request.HasOption<PredefinedAcl>()) {
-    builder.AddHeader(
-        "x-goog-acl: " +
-        XmlMapPredefinedAcl(request.GetOption<PredefinedAcl>().value()));
+    builder.AddHeader("x-goog-acl: " +
+                      request.GetOption<PredefinedAcl>().HeaderName());
   }
   builder.AddOption(request.GetOption<UserProject>());
 
@@ -1320,10 +1223,10 @@ StatusOr<ObjectMetadata> CurlClient::InsertObjectMediaXml(
   if (!response.ok()) {
     return std::move(response).status();
   }
-  if (response->status_code >= 300) {
+  if (response->status_code >= HttpStatusCode::kMinNotSuccess) {
     return AsStatus(*response);
   }
-  return internal::ObjectMetadataParser::FromJson(internal::nl::json{
+  return internal::ObjectMetadataParser::FromJson(nl::json{
       {"name", request.object_name()},
       {"bucket", request.bucket_name()},
   });
@@ -1487,12 +1390,6 @@ StatusOr<ObjectMetadata> CurlClient::InsertObjectMediaSimple(
                     std::to_string(request.contents().size()));
   return CheckedFromString<ObjectMetadataParser>(
       builder.BuildRequest().MakeRequest(request.contents()));
-}
-
-StatusOr<std::string> CurlClient::AuthorizationHeader(
-    std::shared_ptr<google::cloud::storage::oauth2::Credentials> const&
-        credentials) {
-  return credentials->AuthorizationHeader();
 }
 
 }  // namespace internal

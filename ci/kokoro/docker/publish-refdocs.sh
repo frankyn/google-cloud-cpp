@@ -44,7 +44,10 @@ if [[ -z "${STAGING_BUCKET:-}" ]]; then
 fi
 
 if [[ -z "${PROJECT_ROOT+x}" ]]; then
-  readonly PROJECT_ROOT="$(cd "$(dirname "$0")/../../.."; pwd)"
+  readonly PROJECT_ROOT="$(
+    cd "$(dirname "$0")/../../.."
+    pwd
+  )"
 fi
 source "${PROJECT_ROOT}/ci/kokoro/define-docker-variables.sh"
 
@@ -85,6 +88,9 @@ upload_docs() {
   return 0
 }
 
+upload_docs "google-cloud-common" \
+  "${BUILD_OUTPUT}/google/cloud/html" "${BRANCH}" \
+  "${CREDENTIALS_FILE}" "${STAGING_BUCKET}"
 upload_docs "google-cloud-bigtable" \
   "${BUILD_OUTPUT}/google/cloud/bigtable/html" "${BRANCH}" \
   "${CREDENTIALS_FILE}" "${STAGING_BUCKET}"

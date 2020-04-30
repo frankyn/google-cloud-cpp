@@ -15,10 +15,6 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_CLIENT_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_CLIENT_H
 
-#include "google/cloud/internal/disjunction.h"
-#include "google/cloud/internal/throw_delegate.h"
-#include "google/cloud/status.h"
-#include "google/cloud/status_or.h"
 #include "google/cloud/storage/hmac_key_metadata.h"
 #include "google/cloud/storage/internal/logging_client.h"
 #include "google/cloud/storage/internal/parameter_pack_validation.h"
@@ -37,6 +33,10 @@
 #include "google/cloud/storage/retry_policy.h"
 #include "google/cloud/storage/upload_options.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/internal/disjunction.h"
+#include "google/cloud/internal/throw_delegate.h"
+#include "google/cloud/status.h"
+#include "google/cloud/status_or.h"
 #include <type_traits>
 
 namespace google {
@@ -119,7 +119,7 @@ class ResumableParallelUploadState;
  * perform its work the returned `StatusOr<T>` contains the error details. If
  * the `ok()` member function in the `StatusOr<T>` returns `true` then it
  * contains the expected result. Please consult the
- * [`StatusOr<T>` documentation](#google::cloud::v0::StatusOr) for more details.
+ * [`StatusOr<T>` documentation](#google::cloud::v1::StatusOr) for more details.
  *
  * @code
  * namespace gcs = google::cloud::storage;
@@ -169,7 +169,7 @@ class ResumableParallelUploadState;
  * @see https://cloud.google.com/docs/authentication/production for details
  *     about Application Default %Credentials.
  *
- * @see #google::cloud::v0::StatusOr.
+ * @see #google::cloud::v1::StatusOr.
  *
  * @see `LimitedTimeRetryPolicy` and `LimitedErrorCountRetryPolicy` for
  * alternative retry policies.
@@ -558,7 +558,7 @@ class Client {
   }
 
   /**
-   * Fetches the [IAM policy](@ref google::cloud::v0::IamPolicy) for a Bucket.
+   * Fetches the [IAM policy](@ref google::cloud::v1::IamPolicy) for a Bucket.
    *
    * Google Cloud Identity & Access Management (IAM) lets administrators
    * authorize who can take action on specific resources, including Google
@@ -591,7 +591,7 @@ class Client {
    * @par Example
    * @snippet storage_bucket_iam_samples.cc get bucket iam policy
    *
-   * @see #google::cloud::v0::IamPolicy for details about the `IamPolicy` class.
+   * @see #google::cloud::v1::IamPolicy for details about the `IamPolicy` class.
    */
   template <typename... Options>
   StatusOr<IamPolicy> GetBucketIamPolicy(std::string const& bucket_name,
@@ -602,7 +602,7 @@ class Client {
   }
 
   /**
-   * Fetches the native [IAM policy](@ref google::cloud::v0::IamPolicy) for a
+   * Fetches the native [IAM policy](@ref google::cloud::v1::IamPolicy) for a
    * Bucket.
    *
    * Google Cloud Identity & Access Management (IAM) lets administrators
@@ -631,7 +631,7 @@ class Client {
    * @par Example
    * @snippet storage_bucket_iam_samples.cc native get bucket iam policy
    *
-   * @see #google::cloud::v0::IamPolicy for details about the `IamPolicy` class.
+   * @see #google::cloud::v1::IamPolicy for details about the `IamPolicy` class.
    */
   template <typename... Options>
   StatusOr<NativeIamPolicy> GetNativeBucketIamPolicy(
@@ -642,7 +642,7 @@ class Client {
   }
 
   /**
-   * Sets the [IAM Policy](@ref google::cloud::v0::IamPolicy) for a Bucket.
+   * Sets the [IAM Policy](@ref google::cloud::v1::IamPolicy) for a Bucket.
    *
    * Google Cloud Identity & Access Management (IAM) lets administrators
    * authorize who can take action on specific resources, including Google
@@ -688,7 +688,7 @@ class Client {
    * @par Example: removing a IAM member
    * @snippet storage_bucket_iam_samples.cc remove bucket iam member
    *
-   * @see #google::cloud::v0::IamPolicy for details about the `IamPolicy` class.
+   * @see #google::cloud::v1::IamPolicy for details about the `IamPolicy` class.
    */
   template <typename... Options>
   StatusOr<IamPolicy> SetBucketIamPolicy(std::string const& bucket_name,
@@ -700,7 +700,7 @@ class Client {
   }
 
   /**
-   * Sets the native [IAM Policy](@ref google::cloud::v0::IamPolicy) for a
+   * Sets the native [IAM Policy](@ref google::cloud::v1::IamPolicy) for a
    * Bucket.
    *
    * Google Cloud Identity & Access Management (IAM) lets administrators
@@ -742,7 +742,7 @@ class Client {
    * @par Example: removing a IAM member
    * @snippet storage_bucket_iam_samples.cc native remove bucket iam member
    *
-   * @see #google::cloud::v0::IamPolicy for details about the `IamPolicy` class.
+   * @see #google::cloud::v1::IamPolicy for details about the `IamPolicy` class.
    */
   template <typename... Options>
   StatusOr<NativeIamPolicy> SetNativeBucketIamPolicy(
@@ -823,16 +823,16 @@ class Client {
    * is always required, and it acts as a pre-condition on the operation.
    *
    * @par Example: lock the retention policy
-   * @snippet storage_bucket_samples.cc lock retention policy
+   * @snippet storage_retention_policy_samples.cc lock retention policy
    *
    * @par Example: get the current retention policy
-   * @snippet storage_bucket_samples.cc get retention policy
+   * @snippet storage_retention_policy_samples.cc get retention policy
    *
    * @par Example: set the current retention policy
-   * @snippet storage_bucket_samples.cc set retention policy
+   * @snippet storage_retention_policy_samples.cc set retention policy
    *
    * @par Example: remove the retention policy
-   * @snippet storage_bucket_samples.cc remove retention policy
+   * @snippet storage_retention_policy_samples.cc remove retention policy
    *
    * @see https://cloud.google.com/storage/docs/bucket-lock for a description of
    *     the Bucket Lock feature.
@@ -933,7 +933,7 @@ class Client {
    * @snippet storage_object_samples.cc copy object
    *
    * @par Example: copy an encrypted object
-   * @snippet storage_object_samples.cc copy encrypted object
+   * @snippet storage_object_csek_samples.cc copy encrypted object
    *
    * @see https://cloud.google.com/storage/docs/json_api/v1/objects/copy for
    *   a full description of the advantages of `Objects: rewrite` over
@@ -1034,7 +1034,7 @@ class Client {
    * @snippet storage_object_samples.cc read object range
    *
    * @par Example: read a object encrypted with a CSEK.
-   * @snippet storage_object_samples.cc read encrypted object
+   * @snippet storage_object_csek_samples.cc read encrypted object
    */
   template <typename... Options>
   ObjectReadStream ReadObject(std::string const& bucket_name,
@@ -1110,13 +1110,13 @@ class Client {
    * @snippet storage_object_samples.cc write object
    *
    * @par Example: write an object with a CMEK.
-   * @snippet storage_object_samples.cc write object with kms key
+   * @snippet storage_object_cmek_samples.cc write object with kms key
    *
    * @par Example: starting a resumable upload.
-   * @snippet storage_object_samples.cc start resumable upload
+   * @snippet storage_object_resumable_write_samples.cc start resumable upload
    *
    * @par Example: resuming a resumable upload.
-   * @snippet storage_object_samples.cc resume resumable upload
+   * @snippet storage_object_resumable_write_samples.cc resume resumable upload
    */
   template <typename... Options>
   ObjectWriteStream WriteObject(std::string const& bucket_name,
@@ -1152,10 +1152,10 @@ class Client {
    * case, `IfGenerationMatch`.
    *
    * @par Example
-   * @snippet storage_object_samples.cc upload file
+   * @snippet storage_object_file_transfer_samples.cc upload file
    *
    * @par Example: manually selecting a resumable upload
-   * @snippet storage_object_samples.cc upload file resumable
+   * @snippet storage_object_file_transfer_samples.cc upload file resumable
    */
   template <typename... Options>
   StatusOr<ObjectMetadata> UploadFile(std::string const& file_name,
@@ -1190,7 +1190,7 @@ class Client {
    * This is a read-only operation and is always idempotent.
    *
    * @par Example
-   * @snippet storage_object_samples.cc download file
+   * @snippet storage_object_file_transfer_samples.cc download file
    */
   template <typename... Options>
   Status DownloadToFile(std::string const& bucket_name,
@@ -1353,7 +1353,7 @@ class Client {
    * @snippet storage_object_samples.cc compose object
    *
    * @par Example: using encrypted objects with CSEK
-   * @snippet storage_object_samples.cc compose object from encrypted objects
+   * @snippet storage_object_csek_samples.cc compose object csek
    */
   template <typename... Options>
   StatusOr<ObjectMetadata> ComposeObject(
@@ -1399,10 +1399,10 @@ class Client {
    * case, `IfGenerationMatch`.
    *
    * @par Example
-   * @snippet storage_object_samples.cc rewrite object non blocking
+   * @snippet storage_object_rewrite_samples.cc rewrite object non blocking
    *
    * @par Example
-   * @snippet storage_object_samples.cc rewrite object resume
+   * @snippet storage_object_rewrite_samples.cc rewrite object resume
    */
   template <typename... Options>
   ObjectRewriter RewriteObject(std::string source_bucket_name,
@@ -1454,7 +1454,7 @@ class Client {
    * case, `IfGenerationMatch`.
    *
    * @par Example
-   * @snippet storage_object_samples.cc rewrite object resume
+   * @snippet storage_object_rewrite_samples.cc rewrite object resume
    */
   template <typename... Options>
   ObjectRewriter ResumeRewriteObject(std::string source_bucket_name,
@@ -1506,13 +1506,13 @@ class Client {
    * case, `IfGenerationMatch`.
    *
    * @par Example
-   * @snippet storage_object_samples.cc rewrite object
+   * @snippet storage_object_rewrite_samples.cc rewrite object
    *
    * @par Example: using rewrite object to rotate the encryption key
-   * @snippet storage_object_samples.cc rotate encryption key
+   * @snippet storage_object_csek_samples.cc rotate encryption key
    *
    * @par Example: using rewrite object to rename an object
-   * @snippet storage_object_samples.cc rename object
+   * @snippet storage_object_rewrite_samples.cc rename object
    */
   template <typename... Options>
   StatusOr<ObjectMetadata> RewriteObjectBlocking(
@@ -1766,7 +1766,6 @@ class Client {
    * The API is offered for consistency with the other resource types where
    * Patch and Update APIs have different semantics.
    *
-   * @param bucket_name the name of the bucket that contains the bucket.
    * @param bucket_name the name of the bucket.
    * @param entity the identifier for the user, group, service account, or
    *     predefined set of actors holding the permission.
@@ -2680,10 +2679,10 @@ class Client {
    * @return the signed URL.
    *
    * @par Example
-   * @snippet storage_object_samples.cc sign url v2
+   * @snippet storage_signed_url_v2_samples.cc sign url v2
    *
    * @par Example
-   * @snippet storage_object_samples.cc create put signed url v2
+   * @snippet storage_signed_url_v2_samples.cc create put signed url v2
    *
    * @see https://cloud.google.com/storage/docs/access-control/signed-urls for
    *     a general description of signed URLs and how they can be used.
@@ -2743,10 +2742,10 @@ class Client {
    * @return the signed URL.
    *
    * @par Example
-   * @snippet storage_object_samples.cc sign url v4
+   * @snippet storage_signed_url_v4_samples.cc sign url v4
    *
    * @par Example
-   * @snippet storage_object_samples.cc create put signed url v4
+   * @snippet storage_signed_url_v4_samples.cc create put signed url v4
    *
    * @see https://cloud.google.com/storage/docs/access-control/signed-urls for
    *     a general description of signed URLs and how they can be used.
@@ -2789,7 +2788,7 @@ class Client {
    * `ExactMatch()`, `ContentLengthRange()`.
    *
    * @par Example
-   * @snippet storage_bucket_samples.cc create signed policy document
+   * @snippet storage_policy_doc_samples.cc create signed policy document
    *
    * @see
    * https://cloud.google.com/storage/docs/xml-api/post-object#policydocument
@@ -2804,6 +2803,47 @@ class Client {
     internal::PolicyDocumentRequest request(std::move(document));
     request.set_multiple_options(std::forward<Options>(options)...);
     return SignPolicyDocument(request);
+  }
+
+  /**
+   * Create a signed V4 policy document.
+   *
+   * @note The application must ensure that any document created with this
+   * function contains valid conditions. This function does not do any error
+   * checking, e.g. that a `ExactMatchObject()` condition contains two
+   * elements. Using the provided helper functions can prevent errors.
+   *
+   * @note It is the application's responsibility to construct a POST request
+   * based on the value returned by this function.  For example, a web
+   * application can create a HTML form containing these fields, the result of
+   * which is a POST request to GCS.
+   *
+   * @param document the policy document.
+   * @param options a list of optional parameters, this includes:
+   * `AddExtensionFieldOption`, `BucketBoundHostname`, `PredefinedAcl`,
+   * `Scheme`, `SigningAccountDelegates`, `SigningAccount`, `VirtualHostname`
+   *
+   * @par Helper Functions
+   * The following functions create a `PolicyDocumentCondition` with less
+   * opportunities for typos: `StartsWith()`, `ExactMatchObject()`,
+   * `ExactMatch()`, `ContentLengthRange()`.
+   *
+   * @par Example
+   * @snippet storage_policy_doc_samples.cc create signed policy document v4
+   *
+   * @see
+   * https://cloud.google.com/storage/docs/xml-api/post-object#policydocument
+   *     for a general description of policy documents and how they can be used.
+   *
+   * @see https://cloud.google.com/storage/docs/xml-api/overview for a detailed
+   *     description of the XML API.
+   */
+  template <typename... Options>
+  StatusOr<PolicyDocumentV4Result> GenerateSignedPostPolicyV4(
+      PolicyDocumentV4 document, Options&&... options) {
+    internal::PolicyDocumentV4Request request(std::move(document));
+    request.set_multiple_options(std::forward<Options>(options)...);
+    return SignPolicyDocumentV4(std::move(request));
   }
 
   //@{
@@ -3049,6 +3089,8 @@ class Client {
 
   StatusOr<PolicyDocumentResult> SignPolicyDocument(
       internal::PolicyDocumentRequest const& request);
+  StatusOr<PolicyDocumentV4Result> SignPolicyDocumentV4(
+      internal::PolicyDocumentV4Request request);
 
   std::shared_ptr<internal::RawClient> raw_client_;
 
@@ -3205,7 +3247,7 @@ class ScopedDeleter {
   ~ScopedDeleter();
 
   /// Defer object's deletion to this objects destruction (or ExecuteDelete())
-  void Add(ObjectMetadata object);
+  void Add(ObjectMetadata const& object);
 
   /// Defer object's deletion to this objects destruction (or ExecuteDelete())
   void Add(std::string object_name, std::int64_t generation);

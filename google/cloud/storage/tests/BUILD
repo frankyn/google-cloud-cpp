@@ -21,8 +21,9 @@ load(
     "storage_client_integration_tests",
 )
 
-[cc_binary(
+[cc_test(
     name = test.replace("/", "_").replace(".cc", ""),
+    timeout = "long",
     srcs = [test],
     linkopts = select({
         "@bazel_tools//src/conditions:windows": [],
@@ -31,11 +32,15 @@ load(
             "-ldl",
         ],
     }),
+    tags = [
+        "integration-tests",
+        "storage-integration-tests",
+    ],
     deps = [
+        "//google/cloud:google_cloud_cpp_common",
         "//google/cloud/storage:storage_client",
         "//google/cloud/storage:storage_client_testing",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "@com_google_googletest//:gtest_main",
     ],
 ) for test in storage_client_integration_tests]

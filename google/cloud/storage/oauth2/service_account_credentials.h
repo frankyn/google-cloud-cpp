@@ -15,7 +15,6 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OAUTH2_SERVICE_ACCOUNT_CREDENTIALS_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OAUTH2_SERVICE_ACCOUNT_CREDENTIALS_H
 
-#include "google/cloud/optional.h"
 #include "google/cloud/storage/internal/curl_request_builder.h"
 #include "google/cloud/storage/internal/openssl_util.h"
 #include "google/cloud/storage/internal/sha256_hash.h"
@@ -23,6 +22,7 @@
 #include "google/cloud/storage/oauth2/credentials.h"
 #include "google/cloud/storage/oauth2/refreshing_credentials_wrapper.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/optional.h"
 #include <condition_variable>
 #include <ctime>
 #include <iostream>
@@ -131,9 +131,13 @@ template <typename HttpRequestBuilderType =
 class ServiceAccountCredentials : public Credentials {
  public:
   explicit ServiceAccountCredentials(ServiceAccountCredentialsInfo info)
+      : ServiceAccountCredentials(info, {}) {}
+  ServiceAccountCredentials(ServiceAccountCredentialsInfo info,
+                            ChannelOptions const& options)
       : info_(std::move(info)), clock_() {
     HttpRequestBuilderType request_builder(
-        info_.token_uri, storage::internal::GetDefaultCurlHandleFactory());
+        info_.token_uri,
+        storage::internal::GetDefaultCurlHandleFactory(options));
     request_builder.AddHeader(
         "Content-Type: application/x-www-form-urlencoded");
     // This is the value of grant_type for JSON-formatted service account

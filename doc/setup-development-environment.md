@@ -29,7 +29,6 @@ code style rules:
 sudo apt install -y clang-6.0 clang-tidy clang-format-7 clang-tools
 sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-6.0 100
 sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-7 100
-sudo update-alternatives --install /usr/bin/scan-build scan-build /usr/bin/scan-build-6.0 100
 ```
 
 Install buildifier tool, which we use to format `BUILD` files:
@@ -79,22 +78,21 @@ You may need to clone and compile the code as described [here](setup-cmake-envir
 Run the tests using:
 
 ```console
-env -C cmake-out/home ctest --output-on-failure
+env -C cmake-out/home ctest --output-on-failure -LE integration-tests
 ```
 
 Run the Google Cloud Storage integration tests:
 
 ```console
-env -C cmake-out/home $PWD/google/cloud/storage/ci/run_integration_tests.sh
+env -C cmake-out/home \
+    $PWD/google/cloud/storage/ci/run_integration_tests_emulator_cmake.sh
 ```
 
 Run the Google Cloud Bigtable integration tests:
 
 ```console
 env -C cmake-out/home \
-    CBT=$HOME/google-cloud-sdk/bin/cbt \
-    CBT_EMULATOR=$HOME/google-cloud-sdk/platform/bigtable-emulator/cbtemulator \
-    $PWD/google/cloud/bigtable/ci/run_integration_tests.sh
+    $PWD/google/cloud/bigtable/ci/run_integration_tests_emulator_cmake.sh
 ```
 
 ### Installing Docker

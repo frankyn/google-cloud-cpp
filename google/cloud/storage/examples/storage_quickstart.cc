@@ -12,44 +12,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! [full quickstart] [START storage_quickstart]
+#include "google/cloud/storage/examples/storage_examples_common.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/random.h"
+// [START storage_quickstart]
 #include "google/cloud/storage/client.h"
 #include <iostream>
+// [END storage_quickstart]
 
-int main(int argc, char* argv[]) {
-  if (argc != 3) {
-    std::cerr << "Missing project id and/or bucket name.\n";
-    std::cerr << "Usage: storage_quickstart <bucket-name> <project-id>\n";
-    return 1;
-  }
-  std::string bucket_name = argv[1];
-  std::string project_id = argv[2];
+namespace {
 
-  // Create aliases to make the code easier to read.
+using google::cloud::storage::examples::Usage;
+
+// [START storage_quickstart]
+void StorageQuickstart(std::string const& bucket_name) {
+  // Create an aliases to make the code easier to read.
   namespace gcs = google::cloud::storage;
 
   // Create a client to communicate with Google Cloud Storage. This client
   // uses the default configuration for authentication and project id.
   google::cloud::StatusOr<gcs::Client> client =
       gcs::Client::CreateDefaultClient();
-  if (!client) {
-    std::cerr << "Failed to create Storage Client, status=" << client.status()
-              << "\n";
-    return 1;
-  }
+  if (!client) throw std::runtime_error(client.status().message());
 
-  google::cloud::StatusOr<gcs::BucketMetadata> bucket_metadata =
-      client->CreateBucketForProject(bucket_name, project_id,
-                                     gcs::BucketMetadata());
+  // Create a bucket
+  google::cloud::StatusOr<gcs::BucketMetadata> metadata = client->CreateBucket(
+      bucket_name, gcs::BucketMetadata().set_location("US").set_storage_class(
+                       gcs::storage_class::Standard()));
+  if (!metadata) throw std::runtime_error(metadata.status().message());
 
-  if (!bucket_metadata) {
-    std::cerr << "Error creating bucket " << bucket_name
-              << ", status=" << bucket_metadata.status() << "\n";
-    return 1;
-  }
-
-  std::cout << "Created bucket " << bucket_metadata->name() << "\n";
-
-  return 0;
+  std::cout << "Created bucket " << metadata->name() << "\n";
 }
-//! [full quickstart] [END storage_quickstart]
+// [END storage_quickstart]
+
+void StorageQuickstartCommand(std::vector<std::string> const& argv) {
+  if (argv.size() != 1 || argv[0] == "--help") {
+    throw Usage{"storage-quickstart <bucket-name>"};
+  }
+  StorageQuickstart(argv[0]);
+}
+
+void RunAll(std::vector<std::string> const& argv) {
+  namespace examples = ::google::cloud::storage::examples;
+  namespace gcs = ::google::cloud::storage;
+
+  if (!argv.empty()) throw examples::Usage{"auto"};
+  examples::CheckEnvironmentVariablesAreSet({
+      "GOOGLE_CLOUD_PROJECT",
+  });
+  auto const project_id =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_PROJECT").value();
+  auto generator = google::cloud::internal::DefaultPRNG(std::random_device{}());
+  auto const bucket_name =
+      examples::MakeRandomBucketName(generator, "cloud-cpp-test-examples-");
+
+  std::cout << "\nRunning StorageQuickStart() example" << std::endl;
+  StorageQuickstartCommand({bucket_name});
+
+  auto client = gcs::Client::CreateDefaultClient().value();
+  (void)client.DeleteBucket(bucket_name);
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  namespace examples = ::google::cloud::storage::examples;
+  google::cloud::storage::examples::Example example({
+      {"storage-quickstart", StorageQuickstartCommand},
+      {"auto", RunAll},
+  });
+  return example.Run(argc, argv);
+}

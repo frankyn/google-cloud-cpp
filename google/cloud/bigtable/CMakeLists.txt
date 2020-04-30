@@ -14,23 +14,17 @@
 # limitations under the License.
 # ~~~
 
-find_package(googleapis)
-find_package(google_cloud_cpp_common CONFIG REQUIRED)
-find_package(google_cloud_cpp_grpc_utils CONFIG REQUIRED)
-
-# This should be included from the top level CMakeLists file
-set(BIGTABLE_CLIENT_VERSION_MAJOR 1)
-set(BIGTABLE_CLIENT_VERSION_MINOR 9)
-set(BIGTABLE_CLIENT_VERSION_PATCH 0)
+find_package(googleapis CONFIG REQUIRED)
 
 set(DOXYGEN_PROJECT_NAME "Google Cloud Bigtable C++ Client")
 set(DOXYGEN_PROJECT_BRIEF "A C++ Client Library for Google Cloud Bigtable")
 set(DOXYGEN_PROJECT_NUMBER
-    "${BIGTABLE_CLIENT_VERSION_MAJOR}.${BIGTABLE_CLIENT_VERSION_MINOR}.${BIGTABLE_CLIENT_VERSION_PATCH}"
+    "${GOOGLE_CLOUD_CPP_VERSION_MAJOR}.${GOOGLE_CLOUD_CPP_VERSION_MINOR}.${GOOGLE_CLOUD_CPP_VERSION_PATCH}"
 )
-set(DOXYGEN_EXAMPLE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/examples)
-set(DOXYGEN_PREDEFINED "GOOGLE_CLOUD_CPP_NS=v0"
-                       "BIGTABLE_CLIENT_NS=v${BIGTABLE_CLIENT_VERSION_MAJOR}")
+set(DOXYGEN_EXAMPLE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/examples"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/quickstart")
+set(DOXYGEN_PREDEFINED "GOOGLE_CLOUD_CPP_NS=v1"
+                       "BIGTABLE_CLIENT_NS=v${GOOGLE_CLOUD_CPP_VERSION_MAJOR}")
 
 set(DOXYGEN_EXCLUDE_PATTERNS
     "*/google/cloud/bigtable/README.md"
@@ -129,7 +123,6 @@ add_library(
     internal/async_poll_op.h
     internal/async_retry_multi_page.h
     internal/async_retry_op.h
-    internal/async_retry_unary_rpc.h
     internal/async_retry_unary_rpc_and_poll.h
     internal/bulk_mutator.cc
     internal/bulk_mutator.h
@@ -184,6 +177,8 @@ target_link_libraries(
     PUBLIC bigtable_protos google_cloud_cpp_common google_cloud_cpp_grpc_utils
            gRPC::grpc++ gRPC::grpc protobuf::libprotobuf
     PRIVATE bigtable_common_options)
+google_cloud_cpp_add_common_options(bigtable_client)
+google_cloud_cpp_add_clang_tidy(bigtable_client)
 target_include_directories(
     bigtable_client
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
@@ -195,17 +190,14 @@ set_target_properties(
     bigtable_client
     PROPERTIES
         VERSION
-        ${BIGTABLE_CLIENT_VERSION_MAJOR}.${BIGTABLE_CLIENT_VERSION_MINOR}.${BIGTABLE_CLIENT_VERSION_PATCH}
-        SOVERSION ${BIGTABLE_CLIENT_VERSION_MAJOR})
+        ${GOOGLE_CLOUD_CPP_VERSION_MAJOR}.${GOOGLE_CLOUD_CPP_VERSION_MINOR}.${GOOGLE_CLOUD_CPP_VERSION_PATCH}
+        SOVERSION ${GOOGLE_CLOUD_CPP_VERSION_MAJOR})
 add_library(bigtable::client ALIAS bigtable_client)
 
 include(CreateBazelConfig)
 create_bazel_config(bigtable_client)
-google_cloud_cpp_add_clang_tidy(bigtable_client)
 
 if (BUILD_TESTING)
-    find_package(google_cloud_cpp_testing CONFIG REQUIRED)
-
     add_library(
         bigtable_client_testing
         testing/embedded_server_test_fixture.cc
@@ -216,7 +208,6 @@ if (BUILD_TESTING)
         testing/inprocess_data_client.h
         testing/mock_admin_client.h
         testing/mock_async_failing_rpc_factory.h
-        testing/mock_completion_queue.h
         testing/mock_data_client.h
         testing/mock_instance_admin_client.h
         testing/mock_mutate_rows_reader.h
@@ -242,6 +233,8 @@ if (BUILD_TESTING)
                gRPC::grpc
                protobuf::libprotobuf
         PRIVATE bigtable_common_options)
+    google_cloud_cpp_add_common_options(bigtable_client_testing)
+    google_cloud_cpp_add_clang_tidy(bigtable_client_testing)
 
     create_bazel_config(bigtable_client_testing)
 
@@ -259,7 +252,6 @@ if (BUILD_TESTING)
         client_options_test.cc
         cluster_config_test.cc
         column_family_test.cc
-        completion_queue_test.cc
         data_client_test.cc
         expr_test.cc
         filters_test.cc
@@ -273,7 +265,6 @@ if (BUILD_TESTING)
         instance_update_config_test.cc
         internal/async_longrunning_op_test.cc
         internal/async_retry_multi_page_test.cc
-        internal/async_retry_unary_rpc_test.cc
         internal/bulk_mutator_test.cc
         internal/google_bytes_traits_test.cc
         internal/prefix_range_end_test.cc
@@ -308,9 +299,11 @@ if (BUILD_TESTING)
     list(APPEND bigtable_client_unit_tests internal/readrowsparser_test.cc)
 
     foreach (fname ${bigtable_client_unit_tests})
-        string(REPLACE "/" "_" target ${fname})
-        string(REPLACE ".cc" "" target ${target})
+        string(REPLACE "/" "_" basename ${fname})
+        string(REPLACE ".cc" "" basename ${basename})
+        set(target "bigtable_${basename}")
         add_executable(${target} ${fname})
+        set_target_properties(${target} PROPERTIES OUTPUT_NAME ${basename})
         target_link_libraries(
             ${target}
             PRIVATE bigtable_client_testing
@@ -404,9 +397,9 @@ install(
 google_cloud_cpp_install_headers(bigtable_client include/google/cloud/bigtable)
 
 # Setup global variables used in the following *.in files.
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MAJOR ${BIGTABLE_CLIENT_VERSION_MAJOR})
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MINOR ${BIGTABLE_CLIENT_VERSION_MINOR})
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_PATCH ${BIGTABLE_CLIENT_VERSION_PATCH})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MAJOR ${GOOGLE_CLOUD_CPP_VERSION_MAJOR})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MINOR ${GOOGLE_CLOUD_CPP_VERSION_MINOR})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_PATCH ${GOOGLE_CLOUD_CPP_VERSION_PATCH})
 set(GOOGLE_CLOUD_CPP_PC_NAME "The Google Cloud Bigtable C++ Client Library")
 set(GOOGLE_CLOUD_CPP_PC_DESCRIPTION
     "Provides C++ APIs to access Google Cloud Bigtable.")

@@ -15,12 +15,12 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OBJECT_METADATA_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OBJECT_METADATA_H
 
-#include "google/cloud/optional.h"
-#include "google/cloud/status_or.h"
 #include "google/cloud/storage/internal/common_metadata.h"
 #include "google/cloud/storage/internal/complex_option.h"
 #include "google/cloud/storage/object_access_control.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/optional.h"
+#include "google/cloud/status_or.h"
 #include <map>
 
 namespace google {
@@ -42,8 +42,8 @@ struct CustomerEncryption {
 /// Defines one of the source objects for a compose operation.
 struct ComposeSourceObject {
   std::string object_name;
-  google::cloud::optional<long> generation;
-  google::cloud::optional<long> if_generation_match;
+  google::cloud::optional<std::int64_t> generation;
+  google::cloud::optional<std::int64_t> if_generation_match;
 };
 
 std::ostream& operator<<(std::ostream& os, ComposeSourceObject const& r);

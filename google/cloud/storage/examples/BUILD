@@ -16,56 +16,46 @@ package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
 
-cc_binary(
-    name = "storage_bucket_samples",
-    srcs = ["storage_bucket_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
+load(":storage_examples_common.bzl", "storage_examples_common_hdrs", "storage_examples_common_srcs")
+
+cc_library(
+    name = "storage_examples_common",
+    srcs = storage_examples_common_srcs,
+    hdrs = storage_examples_common_hdrs,
+    deps = [
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud/storage:storage_client",
+    ],
 )
 
-cc_binary(
-    name = "storage_bucket_acl_samples",
-    srcs = ["storage_bucket_acl_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
+load(":storage_examples_unit_tests.bzl", "storage_examples_unit_tests")
 
-cc_binary(
-    name = "storage_bucket_iam_samples",
-    srcs = ["storage_bucket_iam_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
+[cc_test(
+    name = test.replace("/", "_").replace(".cc", ""),
+    srcs = [test],
+    deps = [
+        ":storage_examples_common",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud/storage:storage_client",
+        "//google/cloud/storage:storage_client_testing",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "@com_google_googletest//:gtest_main",
+    ],
+) for test in storage_examples_unit_tests]
 
-cc_binary(
-    name = "storage_default_object_acl_samples",
-    srcs = ["storage_default_object_acl_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
+load(":storage_examples.bzl", "storage_examples")
 
-cc_binary(
-    name = "storage_object_samples",
-    srcs = ["storage_object_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
-
-cc_binary(
-    name = "storage_object_acl_samples",
-    srcs = ["storage_object_acl_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
-
-cc_binary(
-    name = "storage_notification_samples",
-    srcs = ["storage_notification_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
-
-cc_binary(
-    name = "storage_quickstart",
-    srcs = ["storage_quickstart.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
-
-cc_binary(
-    name = "storage_service_account_samples",
-    srcs = ["storage_service_account_samples.cc"],
-    deps = ["//google/cloud/storage:storage_client"],
-)
+[cc_test(
+    name = test.replace("/", "_").replace(".cc", ""),
+    srcs = [test],
+    tags = [
+        "integration-tests",
+        "storage-integration-tests",
+    ],
+    deps = [
+        ":storage_examples_common",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud/storage:storage_client",
+        "@com_google_googletest//:gtest_main",
+    ],
+) for test in storage_examples]

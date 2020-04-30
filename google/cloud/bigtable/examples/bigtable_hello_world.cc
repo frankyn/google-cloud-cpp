@@ -18,20 +18,22 @@
 #include "google/cloud/bigtable/table.h"
 #include "google/cloud/bigtable/table_admin.h"
 //! [bigtable includes] [END bigtable_hw_imports]
+#include "google/cloud/bigtable/examples/bigtable_examples_common.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/random.h"
 #include <iostream>
 
-int main(int argc, char* argv[]) try {
-  if (argc != 4) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(cmd).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <project_id> <instance_id> <table_id>\n";
-    return 1;
-  }
+namespace {
 
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-  std::string const table_id = argv[3];
+using google::cloud::bigtable::examples::Usage;
+
+void BigtableHelloWorld(std::vector<std::string> const& argv) {
+  if (argv.size() != 3) {
+    throw Usage{"hello-world <project-id> <instance-id> <table-id>"};
+  }
+  std::string const project_id = argv[0];
+  std::string const instance_id = argv[1];
+  std::string const table_id = argv[2];
 
   // Create a namespace alias to make the code easier to read.
   //! [aliases]
@@ -84,9 +86,7 @@ int main(int argc, char* argv[]) try {
     google::cloud::Status status = table.Apply(cbt::SingleRowMutation(
         std::move(row_key), cbt::SetCell("family", "c0", greeting)));
 
-    if (!status.ok()) {
-      throw std::runtime_error(status.message());
-    }
+    if (!status.ok()) throw std::runtime_error(status.message());
     ++i;
   }
   //! [write rows] [END bigtable_hw_write_rows]
@@ -98,13 +98,11 @@ int main(int argc, char* argv[]) try {
   // Read a single row.
   //! [read row] [START bigtable_hw_get_with_filter]
   StatusOr<std::pair<bool, cbt::Row>> result = table.ReadRow("key-0", filter);
-  if (!result) {
-    throw std::runtime_error(result.status().message());
-  }
+  if (!result) throw std::runtime_error(result.status().message());
   if (!result->first) {
     std::cout << "Cannot find row 'key-0' in the table: " << table.table_name()
               << "\n";
-    return 0;
+    return;
   }
   cbt::Cell const& cell = result->second.cells().front();
   std::cout << cell.family_name() << ":" << cell.column_qualifier() << "    @ "
@@ -116,14 +114,12 @@ int main(int argc, char* argv[]) try {
   //! [scan all] [START bigtable_hw_scan_with_filter]
   for (StatusOr<cbt::Row> const& row : table.ReadRows(
            cbt::RowRange::InfiniteRange(), cbt::Filter::PassAllFilter())) {
-    if (!row) {
-      throw std::runtime_error(row.status().message());
-    }
+    if (!row) throw std::runtime_error(row.status().message());
     std::cout << row->row_key() << ":\n";
-    for (cbt::Cell const& cell : row->cells()) {
-      std::cout << "\t" << cell.family_name() << ":" << cell.column_qualifier()
-                << "    @ " << cell.timestamp().count() << "us\n"
-                << "\t\"" << cell.value() << '"' << "\n";
+    for (cbt::Cell const& c : row->cells()) {
+      std::cout << "\t" << c.family_name() << ":" << c.column_qualifier()
+                << "    @ " << c.timestamp().count() << "us\n"
+                << "\t\"" << c.value() << '"' << "\n";
     }
   }
   //! [scan all] [END bigtable_hw_scan_with_filter]
@@ -131,14 +127,46 @@ int main(int argc, char* argv[]) try {
   // Delete the table
   //! [delete table] [START bigtable_hw_delete_table]
   google::cloud::Status status = table_admin.DeleteTable(table_id);
-  if (!status.ok()) {
-    throw std::runtime_error(status.message());
-  }
+  if (!status.ok()) throw std::runtime_error(status.message());
   //! [delete table] [END bigtable_hw_delete_table]
+}
 
-  return 0;
-} catch (std::exception const& ex) {
-  std::cerr << "Standard C++ exception raised: " << ex.what() << "\n";
-  return 1;
+void RunAll(std::vector<std::string> const& argv) {
+  namespace examples = ::google::cloud::bigtable::examples;
+  namespace cbt = google::cloud::bigtable;
+
+  if (!argv.empty()) throw Usage{"auto"};
+  if (!examples::RunAdminIntegrationTests()) return;
+  examples::CheckEnvironmentVariablesAreSet({
+      "GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID",
+  });
+  auto const project_id =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_PROJECT").value();
+  auto const instance_id = google::cloud::internal::GetEnv(
+                               "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID")
+                               .value();
+
+  cbt::TableAdmin admin(
+      cbt::CreateDefaultAdminClient(project_id, cbt::ClientOptions{}),
+      instance_id);
+
+  examples::CleanupOldTables("hw-tbl-", admin);
+
+  auto generator = google::cloud::internal::DefaultPRNG(std::random_device{}());
+  auto table_id = examples::RandomTableId("hw-tbl-", generator);
+
+  std::cout << "\nRunning the BigtableHelloWorld() example" << std::endl;
+  BigtableHelloWorld({project_id, instance_id, table_id});
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  google::cloud::bigtable::examples::Example example({
+      {"auto", RunAll},
+      {"hello-world", BigtableHelloWorld},
+  });
+  return example.Run(argc, argv);
 }
 //! [all code]

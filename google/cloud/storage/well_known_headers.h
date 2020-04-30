@@ -15,9 +15,10 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_WELL_KNOWN_HEADERS_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_WELL_KNOWN_HEADERS_H
 
+#include "google/cloud/storage/version.h"
 #include "google/cloud/internal/random.h"
 #include "google/cloud/optional.h"
-#include "google/cloud/storage/version.h"
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -250,7 +251,7 @@ std::ostream& operator<<(std::ostream& os, SourceEncryptionKey const& rhs);
  * @param gen the pseudo-random number generator.
  *
  * @par Example
- * @snippet storage_object_samples.cc generate encryption key
+ * @snippet storage_object_csek_samples.cc generate encryption key
  *
  * @see https://en.cppreference.com/w/cpp/numeric/random for a general
  *     overview of C++ pseudo-random number support.
@@ -261,12 +262,6 @@ std::ostream& operator<<(std::ostream& os, SourceEncryptionKey const& rhs);
  */
 template <typename Generator>
 static EncryptionKeyData CreateKeyFromGenerator(Generator& gen) {
-  static_assert(
-      std::numeric_limits<unsigned char>::digits == 8,
-      "The Google Cloud Storage C++ library is only supported on platforms\n"
-      "with 8-bit chars.  Please file a bug on\n"
-      "    https://github.com/googleapis/google-cloud-cpp/issues\n"
-      "describing your platform details to request support for it.");
   constexpr int kKeySize = 256 / std::numeric_limits<unsigned char>::digits;
 
   constexpr auto minchar = (std::numeric_limits<char>::min)();

@@ -17,8 +17,8 @@
 #include "google/cloud/storage/internal/nljson.h"
 #include "google/cloud/storage/list_objects_reader.h"
 #include "google/cloud/storage/testing/storage_integration_test.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/testing_util/assert_ok.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 #include <gmock/gmock.h>
 #include <fstream>
 
@@ -29,35 +29,42 @@ inline namespace STORAGE_CLIENT_NS {
 namespace {
 using ::testing::HasSubstr;
 
-// Initialized in main() below.
-char const* flag_bucket_name;
-char const* flag_service_account;
-
 class SignedUrlIntegrationTest
-    : public google::cloud::storage::testing::StorageIntegrationTest {};
+    : public google::cloud::storage::testing::StorageIntegrationTest {
+ protected:
+  void SetUp() override {
+    bucket_name_ = google::cloud::internal::GetEnv(
+                       "GOOGLE_CLOUD_CPP_STORAGE_TEST_BUCKET_NAME")
+                       .value_or("");
+    ASSERT_FALSE(bucket_name_.empty());
+    service_account_ =
+        google::cloud::internal::GetEnv(
+            "GOOGLE_CLOUD_CPP_STORAGE_TEST_SIGNING_SERVICE_ACCOUNT")
+            .value_or("");
+    ASSERT_FALSE(service_account_.empty());
+  }
+
+  std::string bucket_name_;
+  std::string service_account_;
+};
 
 TEST_F(SignedUrlIntegrationTest, CreateV2SignedUrlGet) {
-  if (UsingTestbench()) {
-    // The testbench does not implement signed URLs.
-    return;
-  }
+  // The testbench does not implement signed URLs.
+  if (UsingTestbench()) GTEST_SKIP();
   StatusOr<Client> client = MakeIntegrationTestClient();
   ASSERT_STATUS_OK(client);
-
-  std::string bucket_name = flag_bucket_name;
-  std::string service_account = flag_service_account;
 
   auto object_name = MakeRandomObjectName();
 
   std::string expected = LoremIpsum();
 
   // Create the object, but only if it does not exist already.
-  auto meta = client->InsertObject(bucket_name, object_name, expected,
+  auto meta = client->InsertObject(bucket_name_, object_name, expected,
                                    IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
 
   StatusOr<std::string> signed_url = client->CreateV2SignedUrl(
-      "GET", bucket_name, object_name, SigningAccount(service_account));
+      "GET", bucket_name_, object_name, SigningAccount(service_account_));
   ASSERT_STATUS_OK(signed_url);
 
   // Verify the signed URL can be used to download the object.
@@ -70,27 +77,22 @@ TEST_F(SignedUrlIntegrationTest, CreateV2SignedUrlGet) {
 
   EXPECT_EQ(expected, response->payload);
 
-  auto deleted = client->DeleteObject(bucket_name, object_name);
+  auto deleted = client->DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
 
 TEST_F(SignedUrlIntegrationTest, CreateV2SignedUrlPut) {
-  if (UsingTestbench()) {
-    // The testbench does not implement signed URLs.
-    return;
-  }
+  // The testbench does not implement signed URLs.
+  if (UsingTestbench()) GTEST_SKIP();
   StatusOr<Client> client = MakeIntegrationTestClient();
   ASSERT_STATUS_OK(client);
-
-  std::string bucket_name = flag_bucket_name;
-  std::string service_account = flag_service_account;
 
   auto object_name = MakeRandomObjectName();
 
   std::string expected = LoremIpsum();
 
   StatusOr<std::string> signed_url = client->CreateV2SignedUrl(
-      "PUT", bucket_name, object_name, SigningAccount(service_account),
+      "PUT", bucket_name_, object_name, SigningAccount(service_account_),
       ContentType("application/octet-stream"));
   ASSERT_STATUS_OK(signed_url);
 
@@ -104,36 +106,31 @@ TEST_F(SignedUrlIntegrationTest, CreateV2SignedUrlPut) {
   ASSERT_STATUS_OK(response);
   EXPECT_EQ(200, response->status_code);
 
-  auto stream = client->ReadObject(bucket_name, object_name);
+  auto stream = client->ReadObject(bucket_name_, object_name);
   std::string actual(std::istreambuf_iterator<char>{stream}, {});
   EXPECT_EQ(expected, actual);
 
-  auto deleted = client->DeleteObject(bucket_name, object_name);
+  auto deleted = client->DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
 
 TEST_F(SignedUrlIntegrationTest, CreateV4SignedUrlGet) {
-  if (UsingTestbench()) {
-    // The testbench does not implement signed URLs.
-    return;
-  }
+  // The testbench does not implement signed URLs.
+  if (UsingTestbench()) GTEST_SKIP();
   StatusOr<Client> client = MakeIntegrationTestClient();
   ASSERT_STATUS_OK(client);
-
-  std::string bucket_name = flag_bucket_name;
-  std::string service_account = flag_service_account;
 
   auto object_name = MakeRandomObjectName();
 
   std::string expected = LoremIpsum();
 
   // Create the object, but only if it does not exist already.
-  auto meta = client->InsertObject(bucket_name, object_name, expected,
+  auto meta = client->InsertObject(bucket_name_, object_name, expected,
                                    IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
 
   StatusOr<std::string> signed_url = client->CreateV4SignedUrl(
-      "GET", bucket_name, object_name, SigningAccount(service_account));
+      "GET", bucket_name_, object_name, SigningAccount(service_account_));
   ASSERT_STATUS_OK(signed_url);
 
   // Verify the signed URL can be used to download the object.
@@ -146,27 +143,22 @@ TEST_F(SignedUrlIntegrationTest, CreateV4SignedUrlGet) {
 
   EXPECT_EQ(expected, response->payload);
 
-  auto deleted = client->DeleteObject(bucket_name, object_name);
+  auto deleted = client->DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
 
 TEST_F(SignedUrlIntegrationTest, CreateV4SignedUrlPut) {
-  if (UsingTestbench()) {
-    // The testbench does not implement signed URLs.
-    return;
-  }
+  // The testbench does not implement signed URLs.
+  if (UsingTestbench()) GTEST_SKIP();
   StatusOr<Client> client = MakeIntegrationTestClient();
   ASSERT_STATUS_OK(client);
-
-  std::string bucket_name = flag_bucket_name;
-  std::string service_account = flag_service_account;
 
   auto object_name = MakeRandomObjectName();
 
   std::string expected = LoremIpsum();
 
   StatusOr<std::string> signed_url = client->CreateV4SignedUrl(
-      "PUT", bucket_name, object_name, SigningAccount(service_account));
+      "PUT", bucket_name_, object_name, SigningAccount(service_account_));
   ASSERT_STATUS_OK(signed_url);
 
   // Verify the signed URL can be used to download the object.
@@ -178,11 +170,11 @@ TEST_F(SignedUrlIntegrationTest, CreateV4SignedUrlPut) {
   ASSERT_STATUS_OK(response);
   EXPECT_EQ(200, response->status_code);
 
-  auto stream = client->ReadObject(bucket_name, object_name);
+  auto stream = client->ReadObject(bucket_name_, object_name);
   std::string actual(std::istreambuf_iterator<char>{stream}, {});
   EXPECT_EQ(expected, actual);
 
-  auto deleted = client->DeleteObject(bucket_name, object_name);
+  auto deleted = client->DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
 
@@ -191,21 +183,3 @@ TEST_F(SignedUrlIntegrationTest, CreateV4SignedUrlPut) {
 }  // namespace storage
 }  // namespace cloud
 }  // namespace google
-
-int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 3) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <bucket-name> <service-account-name>\n";
-    return 1;
-  }
-
-  google::cloud::storage::flag_bucket_name = argv[1];
-  google::cloud::storage::flag_service_account = argv[2];
-
-  return RUN_ALL_TESTS();
-}

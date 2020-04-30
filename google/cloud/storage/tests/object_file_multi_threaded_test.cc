@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "google/cloud/log.h"
 #include "google/cloud/storage/client.h"
 #include "google/cloud/storage/testing/storage_integration_test.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/testing_util/assert_ok.h"
-#include "google/cloud/testing_util/capture_log_lines_backend.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 #include <gmock/gmock.h>
 #include <cstdio>
 #include <fstream>
@@ -33,27 +31,35 @@ namespace {
 
 using ::testing::HasSubstr;
 
-// Initialized in main() below.
-char const* flag_bucket_name;
-int flag_object_count;
-
 auto const kObjectSize = 16 * 1024;
 
 class ObjectFileMultiThreadedTest
     : public google::cloud::storage::testing::StorageIntegrationTest {
  protected:
-  unsigned ThreadCount() {
-    static unsigned const count = [] {
-      auto c = std::thread::hardware_concurrency();
-      return c == 0 ? 4u : 4 * c;
+  void SetUp() override {
+    bucket_name_ = google::cloud::internal::GetEnv(
+                       "GOOGLE_CLOUD_CPP_STORAGE_TEST_BUCKET_NAME")
+                       .value_or("");
+    ASSERT_FALSE(bucket_name_.empty());
+    auto object_count = google::cloud::internal::GetEnv(
+        "GOOGLE_CLOUD_CPP_STORAGE_TEST_OBJECT_COUNT");
+    if (object_count) object_count_ = std::stoi(*object_count);
+  }
+
+  static int ThreadCount() {
+    static int const count = [] {
+      auto c = static_cast<int>(std::thread::hardware_concurrency());
+      return c == 0 ? 4 : 4 * c;
     }();
     return count;
   }
 
   std::vector<std::string> CreateObjectNames() {
-    std::vector<std::string> object_names(flag_object_count);
+    std::vector<std::string> object_names(object_count_);
+    // Use MakeRandomFilename() because the same name is used for
+    // the destination file.
     std::generate_n(object_names.begin(), object_names.size(),
-                    [this] { return MakeRandomObjectName(); });
+                    [this] { return MakeRandomFilename(); });
     return object_names;
   }
 
@@ -71,8 +77,8 @@ class ObjectFileMultiThreadedTest
         std::unique_lock<std::mutex> lk(mu_);
         std::cout << '.' << std::flush;
       }
-      auto metadata = client.InsertObject(flag_bucket_name, n, contents,
-                                          IfGenerationMatch(0));
+      auto metadata =
+          client.InsertObject(bucket_name_, n, contents, IfGenerationMatch(0));
       if (!metadata) return metadata.status();
     }
     return Status();
@@ -100,7 +106,6 @@ class ObjectFileMultiThreadedTest
   Status DeleteSomeObjects(Client client,
                            std::vector<std::string> const& object_names,
                            int thread_count, int modulo) {
-    auto contents = MakeRandomData(kObjectSize);
     int index = 0;
     Status status;
     for (auto& name : object_names) {
@@ -109,7 +114,7 @@ class ObjectFileMultiThreadedTest
         std::unique_lock<std::mutex> lk(mu_);
         std::cout << '.' << std::flush;
       }
-      auto result = client.DeleteObject(flag_bucket_name, name);
+      auto result = client.DeleteObject(bucket_name_, name);
       if (!result.ok()) status = result;
     }
     return status;
@@ -119,14 +124,14 @@ class ObjectFileMultiThreadedTest
                      std::vector<std::string> const& object_names) {
     // Parallelize the object deletion too because it can be slow.
     int const thread_count = ThreadCount();
-    auto create_some_objects = [this, &client, &object_names,
+    auto delete_some_objects = [this, &client, &object_names,
                                 thread_count](int modulo) {
       return DeleteSomeObjects(client, object_names, thread_count, modulo);
     };
     std::vector<std::future<Status>> tasks(thread_count);
     int modulo = 0;
     for (auto& t : tasks) {
-      t = std::async(std::launch::async, create_some_objects, modulo++);
+      t = std::async(std::launch::async, delete_some_objects, modulo++);
     }
     for (auto& t : tasks) {
       auto const status = t.get();
@@ -134,8 +139,9 @@ class ObjectFileMultiThreadedTest
     }
   }
 
- protected:
   std::mutex mu_;
+  std::string bucket_name_;
+  int object_count_ = 128;
 };
 
 TEST_F(ObjectFileMultiThreadedTest, Download) {
@@ -148,11 +154,10 @@ TEST_F(ObjectFileMultiThreadedTest, Download) {
   std::cout << " DONE\n";
 
   // Create multiple threads, each downloading a portion of the objects.
-  int const thread_count = ThreadCount();
+  auto const thread_count = ThreadCount();
   auto download_some_objects = [this, thread_count, &client,
                                 &object_names](int modulo) {
     std::cout << '+' << std::flush;
-    auto contents = MakeRandomData(kObjectSize);
     int index = 0;
     for (auto& name : object_names) {
       if (index++ % thread_count != modulo) continue;
@@ -160,7 +165,7 @@ TEST_F(ObjectFileMultiThreadedTest, Download) {
         std::unique_lock<std::mutex> lk(mu_);
         std::cout << '.' << std::flush;
       }
-      auto status = client->DownloadToFile(flag_bucket_name, name, name);
+      auto status = client->DownloadToFile(bucket_name_, name, name);
       if (!status.ok()) return status;  // stop on the first error
     }
     return Status();
@@ -191,21 +196,3 @@ TEST_F(ObjectFileMultiThreadedTest, Download) {
 }  // namespace storage
 }  // namespace cloud
 }  // namespace google
-
-int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 3) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <bucket-name> <object-count>\n";
-    return 1;
-  }
-
-  google::cloud::storage::flag_bucket_name = argv[1];
-  google::cloud::storage::flag_object_count = std::stoi(argv[2]);
-
-  return RUN_ALL_TESTS();
-}

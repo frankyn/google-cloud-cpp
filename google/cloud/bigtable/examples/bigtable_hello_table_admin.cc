@@ -17,22 +17,24 @@
 //! [bigtable includes]
 #include "google/cloud/bigtable/table_admin.h"
 //! [bigtable includes]
+#include "google/cloud/bigtable/examples/bigtable_examples_common.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/random.h"
 #include <iostream>
 
-int main(int argc, char* argv[]) try {
-  if (argc != 4) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(cmd).find_last_of('/');
-    auto program = cmd.substr(last_slash + 1);
-    std::cerr << "\nUsage: " << program
-              << " <project-id> <instance-id> <table-id>\n\n"
-              << "Example: " << program << " my-project my-instance my-table\n";
-    return 1;
-  }
+namespace {
 
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-  std::string const table_id = argv[3];
+using google::cloud::bigtable::examples::Usage;
+
+void HelloWorldTableAdmin(std::vector<std::string> const& argv) {
+  if (argv.size() != 3) {
+    throw Usage{
+        "hello-world-table-admin <project-id> <instance-id> "
+        "<table-id>"};
+  }
+  std::string const project_id = argv[0];
+  std::string const instance_id = argv[1];
+  std::string const table_id = argv[2];
 
   //! [aliases]
   namespace cbt = google::cloud::bigtable;
@@ -59,9 +61,7 @@ int main(int argc, char* argv[]) try {
   //! [listing tables]
   std::cout << "Listing tables:\n";
   auto tables = admin.ListTables(cbt::TableAdmin::NAME_ONLY);
-  if (!tables) {
-    throw std::runtime_error(tables.status().message());
-  }
+  if (!tables) throw std::runtime_error(tables.status().message());
   for (auto const& table : *tables) {
     std::cout << "    " << table.name() << "\n";
   }
@@ -72,9 +72,7 @@ int main(int argc, char* argv[]) try {
   std::cout << "Get table metadata:\n";
   StatusOr<google::bigtable::admin::v2::Table> table =
       admin.GetTable(table_id, cbt::TableAdmin::FULL);
-  if (!table) {
-    throw std::runtime_error(table.status().message());
-  }
+  if (!table) throw std::runtime_error(table.status().message());
   std::cout << "Table name : " << table->name() << "\n";
 
   std::cout << "List table families and GC rules:\n";
@@ -105,24 +103,54 @@ int main(int argc, char* argv[]) try {
   //! [drop all rows]
   std::cout << "Deleting all the rows in " << table_id << "\n";
   google::cloud::Status status = admin.DropAllRows(table_id);
-  if (!status.ok()) {
-    throw std::runtime_error(status.message());
-  }
+  if (!status.ok()) throw std::runtime_error(status.message());
   std::cout << "DONE\n";
   //! [drop all rows]
 
   //! [delete table]
   std::cout << "Deleting table:\n";
   google::cloud::Status delete_status = admin.DeleteTable(table_id);
-  if (!delete_status.ok()) {
-    throw std::runtime_error(delete_status.message());
-  }
+  if (!delete_status.ok()) throw std::runtime_error(delete_status.message());
   std::cout << "DONE\n";
   //! [delete table]
+}
 
-  return 0;
-} catch (std::exception const& ex) {
-  std::cerr << "Standard C++ exception raised: " << ex.what() << "\n";
-  return 1;
+void RunAll(std::vector<std::string> const& argv) {
+  namespace examples = ::google::cloud::bigtable::examples;
+  namespace cbt = google::cloud::bigtable;
+
+  if (!argv.empty()) throw google::cloud::bigtable::examples::Usage{"auto"};
+  if (!examples::RunAdminIntegrationTests()) return;
+  examples::CheckEnvironmentVariablesAreSet({
+      "GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID",
+  });
+  auto const project_id =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_PROJECT").value();
+  auto const instance_id = google::cloud::internal::GetEnv(
+                               "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID")
+                               .value();
+
+  cbt::TableAdmin admin(
+      cbt::CreateDefaultAdminClient(project_id, cbt::ClientOptions{}),
+      instance_id);
+
+  examples::CleanupOldTables("hw-admin-tbl-", admin);
+
+  auto generator = google::cloud::internal::DefaultPRNG(std::random_device{}());
+  auto table_id = examples::RandomTableId("hw-admin-tbl-", generator);
+
+  std::cout << "\nRunning the HelloWorldTableAdmin() example" << std::endl;
+  HelloWorldTableAdmin({project_id, instance_id, table_id});
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  google::cloud::bigtable::examples::Example example({
+      {"auto", RunAll},
+      {"hello-world-table-admin", HelloWorldTableAdmin},
+  });
+  return example.Run(argc, argv);
 }
 //! [all code]

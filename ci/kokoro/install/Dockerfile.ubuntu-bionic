@@ -15,7 +15,7 @@
 #
 # WARNING: This is an automatically generated file. Consider changing the
 #     sources instead. You can find the source templates and scripts at:
-#     https://github.com/googleapis/google-cloud-cpp-common/tree/master/ci/templates
+#     https://github.com/googleapis/google-cloud-cpp/tree/master/ci/templates
 #
 
 ARG DISTRO_VERSION=bionic
@@ -29,7 +29,7 @@ ARG NCPU=4
 # ```bash
 RUN apt-get update && \
     apt-get --no-install-recommends install -y apt-transport-https apt-utils \
-        automake build-essential cmake ca-certificates git gcc g++ cmake \
+        automake build-essential ccache cmake ca-certificates git gcc g++ \
         libc-ares-dev libc-ares2 libcurl4-openssl-dev libssl-dev m4 make \
         pkg-config tar wget zlib1g-dev
 # ```
@@ -76,9 +76,9 @@ RUN wget -q https://github.com/grpc/grpc/archive/78ace4cd5dfcc1f2eced44d22d752f1
 
 # ```bash
 WORKDIR /var/tmp/build
-RUN wget -q https://github.com/google/crc32c/archive/1.0.6.tar.gz && \
-    tar -xf 1.0.6.tar.gz && \
-    cd crc32c-1.0.6 && \
+RUN wget -q https://github.com/google/crc32c/archive/1.1.0.tar.gz && \
+    tar -xf 1.1.0.tar.gz && \
+    cd crc32c-1.1.0 && \
     cmake \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=yes \
@@ -97,9 +97,9 @@ RUN wget -q https://github.com/google/crc32c/archive/1.0.6.tar.gz && \
 
 # ```bash
 WORKDIR /var/tmp/build
-RUN wget -q https://github.com/googleapis/cpp-cmakefiles/archive/v0.5.0.tar.gz && \
-    tar -xf v0.5.0.tar.gz && \
-    cd cpp-cmakefiles-0.5.0 && \
+RUN wget -q https://github.com/googleapis/cpp-cmakefiles/archive/v0.9.0.tar.gz && \
+    tar -xf v0.9.0.tar.gz && \
+    cd cpp-cmakefiles-0.9.0 && \
     cmake -DBUILD_SHARED_LIBS=YES -H. -Bcmake-out && \
     cmake --build cmake-out -- -j ${NCPU:-4} && \
     cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
@@ -122,26 +122,9 @@ RUN wget -q https://github.com/google/googletest/archive/release-1.10.0.tar.gz &
     ldconfig
 # ```
 
-# #### google-cloud-cpp-common
-
-# The project also depends on google-cloud-cpp-common, the libraries shared by
-# all the Google Cloud C++ client libraries:
-
-# ```bash
-WORKDIR /var/tmp/build
-RUN wget -q https://github.com/googleapis/google-cloud-cpp-common/archive/v0.21.0.tar.gz && \
-    tar -xf v0.21.0.tar.gz && \
-    cd google-cloud-cpp-common-0.21.0 && \
-    cmake -H. -Bcmake-out \
-        -DBUILD_TESTING=OFF \
-        -DGOOGLE_CLOUD_CPP_TESTING_UTIL_ENABLE_INSTALL=ON && \
-    cmake --build cmake-out -- -j ${NCPU:-4} && \
-    cmake --build cmake-out --target install -- -j ${NCPU:-4} && \
-    ldconfig
-# ```
-
 FROM devtools AS install
 ARG NCPU=4
+ARG DISTRO="distro-name"
 
 # #### Compile and install the main project
 
@@ -150,6 +133,19 @@ ARG NCPU=4
 # ```bash
 WORKDIR /home/build/project
 COPY . /home/build/project
+## [START IGNORED]
+# This is just here to speed up the pre-submit builds and should not be part
+# of the instructions on how to compile the code.
+ENV CCACHE_DIR=/h/.ccache
+RUN mkdir -p /h/.ccache; \
+    echo "max_size = 4.0G" >"/h/.ccache/ccache.conf"; \
+    if [ -r "ci/kokoro/install/ccache-contents/${DISTRO}.tar.gz" ]; then \
+      tar -xf "ci/kokoro/install/ccache-contents/${DISTRO}.tar.gz" -C /h; \
+      ccache --show-stats; \
+      ccache --zero-stats; \
+    fi; \
+    true # Ignore all errors, failures in caching should not break the build
+## [END IGNORED]
 RUN cmake -H. -Bcmake-out
 RUN cmake --build cmake-out -- -j "${NCPU:-4}"
 WORKDIR /home/build/project/cmake-out
@@ -162,16 +158,24 @@ RUN cmake --build . --target install
 ENV PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig:/usr/local/lib/pkgconfig
 
 # Verify that the installed files are actually usable
-WORKDIR /home/build/test-install-plain-make
-COPY ci/test-install /home/build/test-install-plain-make
+WORKDIR /home/build/bigtable-make
+COPY google/cloud/bigtable/quickstart /home/build/bigtable-make
 RUN make
 
-WORKDIR /home/build/test-install-cmake-bigtable
-COPY ci/test-install/bigtable /home/build/test-install-cmake-bigtable
-RUN env -u PKG_CONFIG_PATH cmake -H. -B/i/bigtable
-RUN cmake --build /i/bigtable -- -j ${NCPU:-4}
+WORKDIR /home/build/storage-make
+COPY google/cloud/storage/quickstart /home/build/storage-make
+RUN make
 
-WORKDIR /home/build/test-install-cmake-storage
-COPY ci/test-install/storage /home/build/test-install-cmake-storage
+WORKDIR /home/build/quickstart-cmake/bigtable
+COPY google/cloud/bigtable/quickstart /home/build/quickstart-cmake/bigtable
+RUN env -u PKG_CONFIG_PATH cmake -H. -B/i/bigtable
+RUN cmake --build /i/bigtable
+WORKDIR /home/build/quickstart-cmake/storage
+COPY google/cloud/storage/quickstart /home/build/quickstart-cmake/storage
 RUN env -u PKG_CONFIG_PATH cmake -H. -B/i/storage
-RUN cmake --build /i/storage -- -j ${NCPU:-4}
+RUN cmake --build /i/storage
+
+
+# This is just here to speed up the pre-submit builds and should not be part
+# of the instructions on how to compile the code.
+RUN ccache --show-stats --zero-stats || true

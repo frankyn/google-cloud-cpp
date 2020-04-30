@@ -15,13 +15,13 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OAUTH2_AUTHORIZED_USER_CREDENTIALS_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_OAUTH2_AUTHORIZED_USER_CREDENTIALS_H
 
-#include "google/cloud/status.h"
 #include "google/cloud/storage/internal/curl_request_builder.h"
 #include "google/cloud/storage/internal/http_response.h"
 #include "google/cloud/storage/oauth2/credential_constants.h"
 #include "google/cloud/storage/oauth2/credentials.h"
 #include "google/cloud/storage/oauth2/refreshing_credentials_wrapper.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/status.h"
 #include <iostream>
 #include <mutex>
 
@@ -77,10 +77,12 @@ template <typename HttpRequestBuilderType =
           typename ClockType = std::chrono::system_clock>
 class AuthorizedUserCredentials : public Credentials {
  public:
-  explicit AuthorizedUserCredentials(AuthorizedUserCredentialsInfo const& info)
+  explicit AuthorizedUserCredentials(AuthorizedUserCredentialsInfo const& info,
+                                     ChannelOptions const& channel_options = {})
       : clock_() {
     HttpRequestBuilderType request_builder(
-        info.token_uri, storage::internal::GetDefaultCurlHandleFactory());
+        info.token_uri,
+        storage::internal::GetDefaultCurlHandleFactory(channel_options));
     std::string payload("grant_type=refresh_token");
     payload += "&client_id=";
     payload += request_builder.MakeEscapedString(info.client_id).get();

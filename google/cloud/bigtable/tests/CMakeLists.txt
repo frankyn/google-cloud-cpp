@@ -19,6 +19,7 @@
 set(bigtable_client_integration_tests
     # cmake-format: sort
     admin_async_future_integration_test.cc
+    admin_iam_policy_integration_test.cc
     admin_integration_test.cc
     data_async_future_integration_test.cc
     data_integration_test.cc
@@ -50,6 +51,10 @@ foreach (fname ${bigtable_client_integration_tests})
                 gRPC::grpc
                 protobuf::libprotobuf
                 bigtable_common_options)
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;bigtable-integration-tests")
 endforeach ()
 
 add_executable(instance_admin_emulator instance_admin_emulator.cc)
@@ -62,3 +67,13 @@ target_link_libraries(
             gRPC::grpc
             protobuf::libprotobuf
             bigtable_common_options)
+
+# We just know that these tests need to be run against production.
+set(bigtable_integration_tests_production # cmake-format: sort
+                                          admin_iam_policy_integration_test)
+
+foreach (target ${bigtable_integration_tests_production})
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;integration-tests-no-emulator")
+endforeach ()

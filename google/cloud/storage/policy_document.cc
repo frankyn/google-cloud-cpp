@@ -45,11 +45,26 @@ std::ostream& operator<<(std::ostream& os, PolicyDocument const& rhs) {
   os << "expiration=" << google::cloud::internal::FormatRfc3339(rhs.expiration)
      << ", ";
   os << "conditions=[";
-  for (auto i = 0U; i != rhs.conditions.size(); ++i) {
-    os << rhs.conditions[i];
-    if (i + 1 < rhs.conditions.size()) {
-      os << ", ";
-    }
+  char const* sep = "";
+  for (auto const& c : rhs.conditions) {
+    os << sep << c;
+    sep = ", ";
+  }
+  return os << "]}";
+}
+
+std::ostream& operator<<(std::ostream& os, PolicyDocumentV4 const& rhs) {
+  os << "PolicyDocumentV4={";
+
+  os << "bucket=" << rhs.bucket << ", object=" << rhs.object
+     << ", expiration=" << rhs.expiration.count()
+     << ", timestamp=" << google::cloud::internal::FormatRfc3339(rhs.timestamp)
+     << ", ";
+  os << "conditions=[";
+  char const* sep = "";
+  for (auto const& c : rhs.conditions) {
+    os << sep << c;
+    sep = ", ";
   }
   return os << "]}";
 }
@@ -60,6 +75,25 @@ std::ostream& operator<<(std::ostream& os, PolicyDocumentResult const& rhs) {
             << google::cloud::internal::FormatRfc3339(rhs.expiration)
             << ", policy=" << rhs.policy << ", signature=" << rhs.signature
             << "}";
+}
+
+std::string FormatDateForForm(PolicyDocumentV4Result const&) {
+  // The V4 signed URL format for timestamps and the format for dates in the V4
+  // policy docs are fortunately the same, so we can just call the existing
+  // function and truncate the sub-day parts.
+  auto constexpr kDateLength = sizeof("YYYYMMDD");
+  return google::cloud::internal::FormatV4SignedUrlTimestamp(
+             std::chrono::system_clock::now())
+      .substr(0, kDateLength);
+}
+
+std::ostream& operator<<(std::ostream& os, PolicyDocumentV4Result const& rhs) {
+  return os << "PolicyDocumentV4Result={"
+            << "url=" << rhs.url << ", access_id=" << rhs.access_id
+            << ", expiration="
+            << google::cloud::internal::FormatRfc3339(rhs.expiration)
+            << ", policy=" << rhs.policy << ", signature=" << rhs.signature
+            << ", signing_algorithm=" << rhs.signing_algorithm << "}";
 }
 }  // namespace STORAGE_CLIENT_NS
 }  // namespace storage

@@ -23,20 +23,28 @@ set(storage_client_integration_tests
     curl_sign_blob_integration_test.cc
     error_injection_integration_test.cc
     key_file_integration_test.cc
+    object_basic_crud_integration_test.cc
     object_checksum_integration_test.cc
+    object_compose_many_integration_test.cc
     object_file_integration_test.cc
     object_file_multi_threaded_test.cc
     object_hash_integration_test.cc
     object_insert_integration_test.cc
     object_integration_test.cc
+    object_list_objects_versions_integration_test.cc
     object_media_integration_test.cc
+    object_parallel_upload_integration_test.cc
+    object_plenty_clients_serially_integration_test.cc
+    object_plenty_clients_simultaneously_integration_test.cc
+    object_resumable_parallel_upload_integration_test.cc
     object_resumable_write_integration_test.cc
     object_rewrite_integration_test.cc
     object_write_streambuf_integration_test.cc
     service_account_integration_test.cc
     signed_url_conformance_test.cc
     signed_url_integration_test.cc
-    slow_reader_integration_test.cc
+    slow_reader_chunk_integration_test.cc
+    slow_reader_stream_integration_test.cc
     storage_include_test.cc
     thread_integration_test.cc)
 
@@ -57,6 +65,18 @@ foreach (fname ${storage_client_integration_tests})
                 Threads::Threads
                 nlohmann_json
                 storage_common_options)
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;storage-integration-tests")
+endforeach ()
+
+# We just know that these tests need to be run against production.
+foreach (target # cmake-format: sort
+                key_file_integration_test signed_url_integration_test)
+    set_tests_properties(
+        ${target} PROPERTIES LABELS
+                             "integration-tests;integration-tests-no-emulator")
 endforeach ()
 
 target_link_libraries(error_injection_integration_test PRIVATE ${CMAKE_DL_LIBS})
@@ -64,7 +84,3 @@ target_link_libraries(error_injection_integration_test PRIVATE ${CMAKE_DL_LIBS})
 include(CreateBazelConfig)
 export_list_to_bazel("storage_client_integration_tests.bzl"
                      "storage_client_integration_tests")
-
-add_subdirectory(parallel_upload_regression)
-add_subdirectory(read_object_stall_regression)
-add_subdirectory(write_deadlock_regression)

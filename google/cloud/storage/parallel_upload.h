@@ -15,14 +15,14 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_PARALLEL_UPLOAD_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_PARALLEL_UPLOAD_H
 
-#include "google/cloud/future.h"
-#include "google/cloud/internal/filesystem.h"
-#include "google/cloud/internal/make_unique.h"
-#include "google/cloud/status_or.h"
 #include "google/cloud/storage/client.h"
 #include "google/cloud/storage/internal/tuple_filter.h"
 #include "google/cloud/storage/object_stream.h"
 #include "google/cloud/storage/version.h"
+#include "google/cloud/future.h"
+#include "google/cloud/internal/filesystem.h"
+#include "google/cloud/internal/make_unique.h"
+#include "google/cloud/status_or.h"
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -966,9 +966,10 @@ std::vector<std::uintmax_t> ComputeParallelFileUploadSplitPoints(
                                .value();
 
   std::size_t const wanted_num_streams =
-      (std::max<std::size_t>)(1,
-                              (std::min)(max_streams,
-                                         div_ceil(file_size, min_stream_size)));
+      (std::max<std::size_t>)(1, (std::min<std::size_t>)(max_streams,
+                                                         div_ceil(
+                                                             file_size,
+                                                             min_stream_size)));
 
   std::uintmax_t const stream_size =
       (std::max<std::uintmax_t>)(1, div_ceil(file_size, wanted_num_streams));
@@ -1047,7 +1048,7 @@ struct PrepareParallelUploadApplyHelper {
  * on the first request that fails.
  *
  * @par Example
- * @snippet storage_object_samples.cc parallel upload file
+ * @snippet storage_object_file_transfer_samples.cc parallel upload file
  */
 template <typename... Options>
 StatusOr<std::vector<ParallelUploadFileShard>> CreateUploadShards(
@@ -1120,6 +1121,11 @@ StatusOr<std::vector<ParallelUploadFileShard>> CreateUploadShards(
   // The extra std::move() is required to workaround a gcc-4.9 and gcc-4.8 bug,
   // which tries to copy the result otherwise.
   return std::move(res);
+#elif defined(__clang__) && \
+    (__clang_major__ < 4 || (__clang_major__ == 3 && __clang_minor__ <= 8))
+  // The extra std::move() is required to workaround a Clang <= 3.8 bug, which
+  // tries to copy the result otherwise.
+  return std::move(res);
 #else
   return res;
 #endif
@@ -1154,7 +1160,7 @@ StatusOr<std::vector<ParallelUploadFileShard>> CreateUploadShards(
  * on the first request that fails.
  *
  * @par Example
- * @snippet storage_object_samples.cc parallel upload file
+ * @snippet storage_object_file_transfer_samples.cc parallel upload file
  */
 template <typename... Options>
 StatusOr<ObjectMetadata> ParallelUploadFile(

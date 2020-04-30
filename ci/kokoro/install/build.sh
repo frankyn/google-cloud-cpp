@@ -16,7 +16,7 @@
 #
 # WARNING: This is an automatically generated file. Consider changing the
 #     sources instead. You can find the source templates and scripts at:
-#     https://github.com/googleapis/google-cloud-cpp-common/tree/master/ci/templates
+#     https://github.com/googleapis/google-cloud-cpp/tree/master/ci/templates
 #
 
 set -eu
@@ -49,27 +49,37 @@ else
   exit 1
 fi
 
+if [[ -z "${PROJECT_ROOT+x}" ]]; then
+  readonly PROJECT_ROOT="$(
+    cd "$(dirname "$0")/../../.."
+    pwd
+  )"
+fi
+source "${PROJECT_ROOT}/ci/colors.sh"
+
+# ATTENTION: The gcr-configuration.sh script MUST be sourced first if present.
 echo "================================================================"
-echo "Load Google Container Registry configuration parameters $(date)."
+log_normal "Load Google Container Registry configuration parameters."
 
 if [[ -f "${KOKORO_GFILE_DIR:-}/gcr-configuration.sh" ]]; then
   source "${KOKORO_GFILE_DIR:-}/gcr-configuration.sh"
 fi
-
-if [[ -z "${PROJECT_ROOT+x}" ]]; then
-  readonly PROJECT_ROOT="$(cd "$(dirname "$0")/../../.."; pwd)"
-fi
+# ATTENTION: The gcr-configuration.sh script MUST be sourced before this file.
 source "${PROJECT_ROOT}/ci/kokoro/define-docker-variables.sh"
 
+GCLOUD=gcloud
+source "${PROJECT_ROOT}/ci/kokoro/gcloud-functions.sh"
+source "${PROJECT_ROOT}/ci/kokoro/cache-functions.sh"
+
 echo "================================================================"
-echo "Change working directory to project root $(date)."
+log_yellow "Change working directory to project root."
 cd "${PROJECT_ROOT}"
 
 echo "================================================================"
-echo "Building with ${NCPU} cores $(date) on ${PWD}."
+log_normal "Building with ${NCPU} cores on ${PWD}."
 
 echo "================================================================"
-echo "Setup Google Container Registry access $(date)."
+log_normal "Setup Google Container Registry access."
 if [[ -f "${KOKORO_GFILE_DIR:-}/gcr-service-account.json" ]]; then
   gcloud auth activate-service-account --key-file \
     "${KOKORO_GFILE_DIR}/gcr-service-account.json"
@@ -77,15 +87,25 @@ fi
 gcloud auth configure-docker
 
 echo "================================================================"
-echo "Download existing image (if available) for ${DISTRO} $(date)."
+log_normal "Download existing image (if available) for ${DISTRO}."
 has_cache="false"
 if docker pull "${INSTALL_IMAGE}:latest"; then
   echo "Existing image successfully downloaded."
   has_cache="true"
 fi
 
+readonly CACHE_BUCKET="${GOOGLE_CLOUD_CPP_KOKORO_RESULTS:-cloud-cpp-kokoro-results}"
+readonly CACHE_FOLDER="${CACHE_BUCKET}/build-cache/google-cloud-cpp/master/install"
+readonly CACHE_NAME="${DISTRO}.tar.gz"
+
+if cache_download_enabled; then
+  mkdir -p ci/kokoro/install/ccache-contents
+  cache_download_tarball \
+    "${CACHE_FOLDER}" "ci/kokoro/install/ccache-contents" "${CACHE_NAME}" || true
+fi
+
 echo "================================================================"
-echo "Build base image with minimal development tools for ${DISTRO} $(date)."
+log_normal "Build base image with minimal development tools for ${DISTRO}."
 update_cache="false"
 
 devtools_flags=(
@@ -103,18 +123,18 @@ if "${has_cache}"; then
   devtools_flags+=("--cache-from=${INSTALL_IMAGE}:latest")
 fi
 
-if [[ "${RUNNING_CI:-}" == "yes" ]] && \
-   [[ -z "${KOKORO_GITHUB_PULL_REQUEST_NUMBER:-}" ]]; then
+if [[ "${RUNNING_CI:-}" == "yes" ]] &&
+  [[ -z "${KOKORO_GITHUB_PULL_REQUEST_NUMBER:-}" ]]; then
   devtools_flags+=("--no-cache")
 fi
 
-echo "Running docker build with " "${devtools_flags[@]}"
+log_normal "Running docker build with " "${devtools_flags[@]}"
 if docker build "${devtools_flags[@]}" ci; then
-   update_cache="true"
+  update_cache="true"
 fi
 
 if "${update_cache}" && [[ "${RUNNING_CI:-}" == "yes" ]] &&
-   [[ -z "${KOKORO_GITHUB_PULL_REQUEST_NUMBER:-}" ]]; then
+  [[ -z "${KOKORO_GITHUB_PULL_REQUEST_NUMBER:-}" ]]; then
   echo "================================================================"
   echo "Uploading updated base image for ${DISTRO} $(date)."
   # Do not stop the build on a failure to update the cache.
@@ -122,13 +142,35 @@ if "${update_cache}" && [[ "${RUNNING_CI:-}" == "yes" ]] &&
 fi
 
 echo "================================================================"
-echo "Run validation script for INSTALL instructions on ${DISTRO}."
+log_yellow "Compile and install the code and the quickstart programs."
 readonly INSTALL_RUN_IMAGE="${DOCKER_IMAGE_PREFIX}/ci-install-runtime-${DISTRO}"
 docker build -t "${INSTALL_RUN_IMAGE}" \
   "--cache-from=${INSTALL_IMAGE}:latest" \
   "--target=install" \
   "--build-arg" "NCPU=${NCPU}" \
+  "--build-arg" "DISTRO=${DISTRO}" \
   -f "ci/kokoro/install/Dockerfile.${DISTRO}" .
-echo "================================================================"
 
+echo "================================================================"
+log_yellow "Run quickstart programs."
 source "${PROJECT_ROOT}/ci/etc/kokoro/install/run-installed-programs.sh"
+
+echo
+log_green "Build successful."
+
+set +e
+if ! cache_upload_enabled; then
+  exit 0
+fi
+
+echo "================================================================"
+log_normal "Preparing and uploading ccache tarball."
+mkdir -p ci/kokoro/install/ccache-contents
+docker run --rm --volume "$PWD:/v" \
+  --workdir /h \
+  "${INSTALL_RUN_IMAGE}:latest" \
+  tar -zcf "/v/ci/kokoro/install/ccache-contents/${DISTRO}.tar.gz" .ccache
+cache_upload_tarball "ci/kokoro/install/ccache-contents" "${DISTRO}.tar.gz" \
+  "${CACHE_FOLDER}"
+
+exit 0

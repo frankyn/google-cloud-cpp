@@ -15,7 +15,6 @@
 #include "google/cloud/bigtable/testing/table_integration_test.h"
 #include "google/cloud/testing_util/assert_ok.h"
 #include "google/cloud/testing_util/chrono_literals.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 
 namespace {
 namespace bigtable = google::cloud::bigtable;
@@ -40,22 +39,9 @@ class DataIntegrationTest : public bigtable::testing::TableIntegrationTest {
 }  // anonymous namespace
 
 int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 3) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <project> <instance>\n";
-    return 1;
-  }
-
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-
+  ::testing::InitGoogleMock(&argc, argv);
   (void)::testing::AddGlobalTestEnvironment(
-      new ::bigtable::testing::TableTestEnvironment(project_id, instance_id));
+      new ::bigtable::testing::TableTestEnvironment);
 
   return RUN_ALL_TESTS();
 }

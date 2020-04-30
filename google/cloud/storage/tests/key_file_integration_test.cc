@@ -15,10 +15,9 @@
 #include "google/cloud/storage/client.h"
 #include "google/cloud/storage/internal/curl_request_builder.h"
 #include "google/cloud/storage/internal/nljson.h"
-#include "google/cloud/storage/list_objects_reader.h"
 #include "google/cloud/storage/testing/storage_integration_test.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/testing_util/assert_ok.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 #include <gmock/gmock.h>
 #include <fstream>
 
@@ -29,24 +28,39 @@ inline namespace STORAGE_CLIENT_NS {
 namespace {
 using ::testing::HasSubstr;
 
-// Initialized in main() below.
-char const* flag_bucket_name;
-char const* flag_key_file_name;
-char const* flag_service_account;
-
 class KeyFileIntegrationTest
-    : public google::cloud::storage::testing::StorageIntegrationTest {};
-
-TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadDefaultAccount) {
-  if (UsingTestbench()) {
+    : public google::cloud::storage::testing::StorageIntegrationTest,
+      public ::testing::WithParamInterface<std::string> {
+ protected:
+  void SetUp() override {
     // The testbench does not implement signed URLs.
-    return;
-  }
-  std::string bucket_name = flag_bucket_name;
-  std::string file_path = flag_key_file_name;
+    if (UsingTestbench()) GTEST_SKIP();
 
+    std::string const key_file_envvar = GetParam();
+
+    bucket_name_ = google::cloud::internal::GetEnv(
+                       "GOOGLE_CLOUD_CPP_STORAGE_TEST_BUCKET_NAME")
+                       .value_or("");
+    ASSERT_FALSE(bucket_name_.empty());
+    key_filename_ =
+        google::cloud::internal::GetEnv(key_file_envvar.c_str()).value_or("");
+    ASSERT_FALSE(key_filename_.empty())
+        << " expected non-empty value for ${" << key_file_envvar << "}";
+    service_account_ =
+        google::cloud::internal::GetEnv(
+            "GOOGLE_CLOUD_CPP_STORAGE_TEST_SIGNING_SERVICE_ACCOUNT")
+            .value_or("");
+    ASSERT_FALSE(service_account_.empty());
+  }
+
+  std::string bucket_name_;
+  std::string key_filename_;
+  std::string service_account_;
+};
+
+TEST_P(KeyFileIntegrationTest, ObjectWriteSignAndReadDefaultAccount) {
   auto credentials =
-      oauth2::CreateServiceAccountCredentialsFromFilePath(flag_key_file_name);
+      oauth2::CreateServiceAccountCredentialsFromFilePath(key_filename_);
   ASSERT_STATUS_OK(credentials);
 
   Client client(*credentials);
@@ -55,12 +69,12 @@ TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadDefaultAccount) {
   std::string expected = LoremIpsum();
 
   // Create the object, but only if it does not exist already.
-  auto meta = client.InsertObject(bucket_name, object_name, expected,
+  auto meta = client.InsertObject(bucket_name_, object_name, expected,
                                   IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
 
   StatusOr<std::string> signed_url =
-      client.CreateV4SignedUrl("GET", bucket_name, object_name);
+      client.CreateV4SignedUrl("GET", bucket_name_, object_name);
   ASSERT_STATUS_OK(signed_url);
 
   // Verify the signed URL can be used to download the object.
@@ -73,21 +87,13 @@ TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadDefaultAccount) {
 
   EXPECT_EQ(expected, response->payload);
 
-  auto deleted = client.DeleteObject(bucket_name, object_name);
+  auto deleted = client.DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
 
-TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadExplicitAccount) {
-  if (UsingTestbench()) {
-    // The testbench does not implement signed URLs.
-    return;
-  }
-  std::string bucket_name = flag_bucket_name;
-  std::string file_path = flag_key_file_name;
-  std::string service_account = flag_service_account;
-
+TEST_P(KeyFileIntegrationTest, ObjectWriteSignAndReadExplicitAccount) {
   auto credentials =
-      oauth2::CreateServiceAccountCredentialsFromFilePath(flag_key_file_name);
+      oauth2::CreateServiceAccountCredentialsFromFilePath(key_filename_);
   ASSERT_STATUS_OK(credentials);
 
   Client client(*credentials);
@@ -96,12 +102,12 @@ TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadExplicitAccount) {
   std::string expected = LoremIpsum();
 
   // Create the object, but only if it does not exist already.
-  auto meta = client.InsertObject(bucket_name, object_name, expected,
+  auto meta = client.InsertObject(bucket_name_, object_name, expected,
                                   IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
 
   StatusOr<std::string> signed_url = client.CreateV4SignedUrl(
-      "GET", bucket_name, object_name, SigningAccount(service_account));
+      "GET", bucket_name_, object_name, SigningAccount(service_account_));
   ASSERT_STATUS_OK(signed_url);
 
   // Verify the signed URL can be used to download the object.
@@ -114,31 +120,19 @@ TEST_F(KeyFileIntegrationTest, ObjectWriteSignAndReadExplicitAccount) {
 
   EXPECT_EQ(expected, response->payload);
 
-  auto deleted = client.DeleteObject(bucket_name, object_name);
+  auto deleted = client.DeleteObject(bucket_name_, object_name);
   ASSERT_STATUS_OK(deleted);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    KeyFileJsonTest, KeyFileIntegrationTest,
+    ::testing::Values("GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_JSON"));
+INSTANTIATE_TEST_SUITE_P(
+    KeyFileP12Test, KeyFileIntegrationTest,
+    ::testing::Values("GOOGLE_CLOUD_CPP_STORAGE_TEST_KEY_FILE_P12"));
 
 }  // namespace
 }  // namespace STORAGE_CLIENT_NS
 }  // namespace storage
 }  // namespace cloud
 }  // namespace google
-
-int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 4) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <bucket-name> <key-file-name> <signing-service-account>\n";
-    return 1;
-  }
-
-  google::cloud::storage::flag_bucket_name = argv[1];
-  google::cloud::storage::flag_key_file_name = argv[2];
-  google::cloud::storage::flag_service_account = argv[3];
-
-  return RUN_ALL_TESTS();
-}

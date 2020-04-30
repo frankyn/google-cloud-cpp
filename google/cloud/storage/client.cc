@@ -13,13 +13,13 @@
 // limitations under the License.
 
 #include "google/cloud/storage/client.h"
-#include "google/cloud/internal/filesystem.h"
-#include "google/cloud/internal/make_unique.h"
-#include "google/cloud/log.h"
 #include "google/cloud/storage/internal/curl_client.h"
 #include "google/cloud/storage/internal/curl_handle.h"
 #include "google/cloud/storage/internal/openssl_util.h"
 #include "google/cloud/storage/oauth2/service_account_credentials.h"
+#include "google/cloud/internal/filesystem.h"
+#include "google/cloud/internal/make_unique.h"
+#include "google/cloud/log.h"
 #include <openssl/md5.h>
 #include <fstream>
 #include <thread>
@@ -296,6 +296,10 @@ StatusOr<std::string> Client::SignUrlV2(
 }
 
 StatusOr<std::string> Client::SignUrlV4(internal::V4SignUrlRequest request) {
+  auto valid = request.Validate();
+  if (!valid.ok()) {
+    return valid;
+  }
   request.AddMissingRequiredHeaders();
   SigningAccount const& signing_account = request.signing_account();
   auto signing_email = SigningEmail(signing_account);
@@ -309,7 +313,7 @@ StatusOr<std::string> Client::SignUrlV4(internal::V4SignUrlRequest request) {
   std::string signature = internal::HexEncode(signed_blob->signed_blob);
   internal::CurlHandle curl;
   std::ostringstream os;
-  os << "https://storage.googleapis.com/" << request.bucket_name();
+  os << request.HostnameWithBucket();
   for (auto& part : request.ObjectNameParts()) {
     os << '/' << curl.MakeEscapedString(part).get();
   }
@@ -336,10 +340,38 @@ StatusOr<PolicyDocumentResult> Client::SignPolicyDocument(
       internal::Base64Encode(signed_blob->signed_blob)};
 }
 
+StatusOr<PolicyDocumentV4Result> Client::SignPolicyDocumentV4(
+    internal::PolicyDocumentV4Request request) {
+  SigningAccount const& signing_account = request.signing_account();
+  auto signing_email = SigningEmail(signing_account);
+  request.SetSigningEmail(signing_email);
+
+  auto string_to_sign = request.StringToSign();
+  auto escaped = internal::PostPolicyV4Escape(string_to_sign);
+  if (!escaped) return escaped.status();
+  auto base64_policy = internal::Base64Encode(*escaped);
+  auto signed_blob = SignBlobImpl(signing_account, base64_policy);
+  if (!signed_blob) {
+    return signed_blob.status();
+  }
+  std::string signature = internal::HexEncode(signed_blob->signed_blob);
+  auto required_fiels = request.RequiredFormFields();
+  required_fiels["x-goog-signature"] = signature;
+  required_fiels["policy"] = base64_policy;
+  return PolicyDocumentV4Result{request.Url(),
+                                request.Credentials(),
+                                request.ExpirationDate(),
+                                base64_policy,
+                                signature,
+                                "GOOG4-RSA-SHA256",
+                                std::move(required_fiels)};
+}
+
 std::string CreateRandomPrefixName(std::string const& prefix) {
+  auto constexpr kPrefixNameSize = 16;
   auto rng = google::cloud::internal::MakeDefaultPRNG();
-  return prefix +
-         google::cloud::internal::Sample(rng, 16, "abcdefghijklmnopqrstuvwxyz");
+  return prefix + google::cloud::internal::Sample(rng, kPrefixNameSize,
+                                                  "abcdefghijklmnopqrstuvwxyz");
 }
 
 namespace internal {
@@ -354,7 +386,7 @@ ScopedDeleter::~ScopedDeleter() {
   }
 }
 
-void ScopedDeleter::Add(ObjectMetadata object) {
+void ScopedDeleter::Add(ObjectMetadata const& object) {
   auto generation = object.generation();
   Add(std::move(object).name(), generation);
 }

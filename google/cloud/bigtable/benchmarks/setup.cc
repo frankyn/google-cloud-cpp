@@ -15,10 +15,12 @@
 #include "google/cloud/bigtable/benchmarks/setup.h"
 #include "google/cloud/bigtable/version.h"
 #include "google/cloud/internal/build_info.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/internal/random.h"
 #include "google/cloud/internal/throw_delegate.h"
+#include <algorithm>
 #include <cctype>
-#include <iomanip>
+#include <ctime>
 #include <iostream>
 #include <sstream>
 
@@ -63,6 +65,8 @@ BenchmarkSetup::BenchmarkSetup(BenchmarkSetupData setup_data)
 
 google::cloud::StatusOr<BenchmarkSetup> MakeBenchmarkSetup(
     std::string const& prefix, int& argc, char* argv[]) {
+  using google::cloud::internal::GetEnv;
+
   BenchmarkSetupData setup_data;
   setup_data.start_time = FormattedStartTime();
   setup_data.notes = FormattedAnnotations();
@@ -88,6 +92,30 @@ google::cloud::StatusOr<BenchmarkSetup> MakeBenchmarkSetup(
     return google::cloud::Status{google::cloud::StatusCode::kFailedPrecondition,
                                  msg};
   };
+
+  bool auto_run =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_CPP_AUTO_RUN_EXAMPLES")
+          .value_or("") == "yes";
+  if (argc == 1 && auto_run) {
+    for (auto const& var : {"GOOGLE_CLOUD_PROJECT",
+                            "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID"}) {
+      auto const value = GetEnv(var).value_or("");
+      if (!value.empty()) continue;
+      std::ostringstream os;
+      os << "The environment variable " << var << " is not set or empty";
+      return google::cloud::Status(google::cloud::StatusCode::kUnknown,
+                                   std::move(os).str());
+    }
+    setup_data.project_id = GetEnv("GOOGLE_CLOUD_PROJECT").value();
+    setup_data.instance_id =
+        GetEnv("GOOGLE_CLOUD_CPP_BIGTABLE_TEST_INSTANCE_ID").value();
+    setup_data.app_profile_id = "default";
+    setup_data.thread_count = 1;
+    setup_data.test_duration = std::chrono::seconds(1);
+    // Must be > 10,000 or scan_throughput_benchmark crashes on Windows
+    setup_data.table_size = 11000;
+    return BenchmarkSetup{setup_data};
+  }
 
   if (argc < 4) {
     return usage("too few arguments for program.");

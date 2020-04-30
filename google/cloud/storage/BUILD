@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO(#3701) Change this visibility to "//:__subpackages__" so that users are
+# required to use the top-level BUILD file rather than reaching down into this
+# one.
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
@@ -46,11 +49,11 @@ cc_library(
     }),
     deps = [
         ":nlohmann_json",
+        "//google/cloud:google_cloud_cpp_common",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@com_github_curl_curl//:curl",
         "@com_github_google_crc32c//:crc32c",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
     ],
 )
 
@@ -67,12 +70,11 @@ cc_library(
     deps = [
         ":nlohmann_json",
         ":storage_client",
+        "//google/cloud:google_cloud_cpp_common",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@com_github_curl_curl//:curl",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -93,12 +95,11 @@ load(":storage_client_unit_tests.bzl", "storage_client_unit_tests")
         ":nlohmann_json",
         ":storage_client",
         ":storage_client_testing",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@com_github_curl_curl//:curl",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
 ) for test in storage_client_unit_tests]

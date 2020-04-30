@@ -14,9 +14,9 @@
 
 #include "google/cloud/bigtable/instance_admin.h"
 #include "google/cloud/bigtable/testing/table_integration_test.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/testing_util/assert_ok.h"
 #include "google/cloud/testing_util/chrono_literals.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 #include <gmock/gmock.h>
 
 namespace google {
@@ -25,6 +25,7 @@ namespace bigtable {
 inline namespace BIGTABLE_CLIENT_NS {
 namespace {
 namespace btadmin = google::bigtable::admin::v2;
+namespace bigtable = google::cloud::bigtable;
 using namespace google::cloud::testing_util::chrono_literals;
 
 class AdminAsyncFutureIntegrationTest
@@ -34,6 +35,12 @@ class AdminAsyncFutureIntegrationTest
   std::unique_ptr<TableAdmin> table_admin_;
 
   void SetUp() {
+    if (google::cloud::internal::GetEnv(
+            "ENABLE_BIGTABLE_ADMIN_INTEGRATION_TESTS")
+            .value_or("") != "yes") {
+      GTEST_SKIP();
+    }
+
     TableIntegrationTest::SetUp();
     admin_client_ = CreateDefaultAdminClient(
         testing::TableTestEnvironment::project_id(), ClientOptions());
@@ -270,11 +277,11 @@ TEST_F(AdminAsyncFutureIntegrationTest, AsyncCheckConsistencyIntegrationTest) {
 
   // Replication needs at least two clusters
   auto cluster_config_1 =
-      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone(),
+      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone_a(),
                               3, bigtable::ClusterConfig::HDD);
-  auto cluster_config_2 = bigtable::ClusterConfig(
-      bigtable::testing::TableTestEnvironment::replication_zone(), 3,
-      bigtable::ClusterConfig::HDD);
+  auto cluster_config_2 =
+      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone_b(),
+                              3, bigtable::ClusterConfig::HDD);
   bigtable::InstanceConfig config(
       id, display_name,
       {{id + "-c1", cluster_config_1}, {id + "-c2", cluster_config_2}});
@@ -353,6 +360,7 @@ TEST_F(AdminAsyncFutureIntegrationTest, AsyncCheckConsistencyIntegrationTest) {
   cq.Shutdown();
   pool.join();
 }
+
 }  // namespace
 }  // namespace BIGTABLE_CLIENT_NS
 }  // namespace bigtable
@@ -360,25 +368,8 @@ TEST_F(AdminAsyncFutureIntegrationTest, AsyncCheckConsistencyIntegrationTest) {
 }  // namespace google
 
 int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 5) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <project_id> <instance_id> <zone> <replication_zone>\n";
-    return 1;
-  }
-
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-  std::string const zone = argv[3];
-  std::string const replication_zone = argv[4];
-
+  ::testing::InitGoogleMock(&argc, argv);
   (void)::testing::AddGlobalTestEnvironment(
-      new google::cloud::bigtable::testing::TableTestEnvironment(
-          project_id, instance_id, zone, replication_zone));
-
+      new google::cloud::bigtable::testing::TableTestEnvironment);
   return RUN_ALL_TESTS();
 }

@@ -14,11 +14,11 @@
 
 #include "google/cloud/bigtable/instance_admin.h"
 #include "google/cloud/bigtable/testing/table_integration_test.h"
+#include "google/cloud/internal/getenv.h"
 #include "google/cloud/internal/make_unique.h"
 #include "google/cloud/internal/random.h"
 #include "google/cloud/testing_util/assert_ok.h"
 #include "google/cloud/testing_util/chrono_literals.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 #include <gmock/gmock.h>
 #include <string>
 #include <vector>
@@ -32,7 +32,13 @@ class AdminIntegrationTest : public bigtable::testing::TableIntegrationTest {
   std::unique_ptr<bigtable::TableAdmin> table_admin_;
 
   void SetUp() {
+    if (google::cloud::internal::GetEnv(
+            "ENABLE_BIGTABLE_ADMIN_INTEGRATION_TESTS")
+            .value_or("") != "yes") {
+      GTEST_SKIP();
+    }
     TableIntegrationTest::SetUp();
+
     std::shared_ptr<bigtable::AdminClient> admin_client =
         bigtable::CreateDefaultAdminClient(
             bigtable::testing::TableTestEnvironment::project_id(),
@@ -249,11 +255,11 @@ TEST_F(AdminIntegrationTest, WaitForConsistencyCheck) {
   // than 30 characters.
   auto display_name = ("IT " + id).substr(0, 30);
   auto cluster_config_1 =
-      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone(),
+      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone_a(),
                               3, bigtable::ClusterConfig::HDD);
-  auto cluster_config_2 = bigtable::ClusterConfig(
-      bigtable::testing::TableTestEnvironment::replication_zone(), 3,
-      bigtable::ClusterConfig::HDD);
+  auto cluster_config_2 =
+      bigtable::ClusterConfig(bigtable::testing::TableTestEnvironment::zone_b(),
+                              3, bigtable::ClusterConfig::HDD);
   bigtable::InstanceConfig config(
       id, display_name,
       {{id + "-c1", cluster_config_1}, {id + "-c2", cluster_config_2}});
@@ -306,30 +312,11 @@ TEST_F(AdminIntegrationTest, WaitForConsistencyCheck) {
   EXPECT_STATUS_OK(table_admin.DeleteTable(random_table_id));
   EXPECT_STATUS_OK(instance_admin.DeleteInstance(id));
 }
-
 // Test Cases Finished
 
 int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Check for arguments validity
-  if (argc != 5) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(cmd).find_last_of('/');
-    // Show Usage if invalid no of arguments
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << "<project_id> <instance_id> <zone> <replication_zone>\n";
-    return 1;
-  }
-
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-  std::string const zone = argv[3];
-  std::string const replication_zone = argv[4];
-
+  ::testing::InitGoogleMock(&argc, argv);
   (void)::testing::AddGlobalTestEnvironment(
-      new bigtable::testing::TableTestEnvironment(project_id, instance_id, zone,
-                                                  replication_zone));
-
+      new bigtable::testing::TableTestEnvironment);
   return RUN_ALL_TESTS();
 }

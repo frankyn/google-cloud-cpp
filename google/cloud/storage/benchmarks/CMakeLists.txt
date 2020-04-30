@@ -40,6 +40,7 @@ if (BUILD_TESTING)
 
     set(storage_benchmark_programs
         # cmake-format: sort
+        ${storage_benchmark_programs_manual_run}
         storage_file_transfer_benchmark.cc
         storage_latency_benchmark.cc
         storage_parallel_uploads_benchmark.cc
@@ -62,6 +63,10 @@ if (BUILD_TESTING)
                     nlohmann_json
                     storage_common_options
                     google_cloud_cpp_common_options)
+        add_test(NAME ${target} COMMAND ${target})
+        set_tests_properties(
+            ${target} PROPERTIES LABELS
+                                 "integration-tests;storage-integration-tests")
     endforeach ()
 
     export_list_to_bazel("storage_benchmark_programs.bzl"
@@ -73,9 +78,11 @@ if (BUILD_TESTING)
         benchmark_parse_args_test.cc benchmark_utils_test.cc)
 
     foreach (fname ${storage_benchmarks_unit_tests})
-        string(REPLACE "/" "_" target ${fname})
-        string(REPLACE ".cc" "" target ${target})
+        string(REPLACE "/" "_" basename ${fname})
+        string(REPLACE ".cc" "" basename ${basename})
+        set(target "storage_benchmarks_${basename}")
         add_executable(${target} ${fname})
+        set_target_properties(${target} PROPERTIES OUTPUT_NAME ${basename})
         if (MSVC)
             target_compile_options(${target} PRIVATE "/bigobj")
         endif ()

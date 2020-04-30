@@ -17,24 +17,26 @@
 //! [bigtable includes]
 #include "google/cloud/bigtable/instance_admin.h"
 //! [bigtable includes]
+#include "google/cloud/bigtable/examples/bigtable_examples_common.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/random.h"
 #include <iostream>
 
-int main(int argc, char* argv[]) try {
-  if (argc != 5) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(cmd).find_last_of('/');
-    auto program = cmd.substr(last_slash + 1);
-    std::cerr << "\nUsage: " << program
-              << " <project-id> <instance-id> <cluster-id> <zone>\n\n"
-              << "Example: " << program
-              << " my-project my-instance my-instance-c1 us-central1-f\n";
-    return 1;
+namespace {
+
+using google::cloud::bigtable::examples::Usage;
+
+void BigtableHelloInstance(std::vector<std::string> const& argv) {
+  if (argv.size() != 4) {
+    throw Usage{
+        "bigtable-hello-instance <project-id> <instance-id> <cluster-id> "
+        "<zone>"};
   }
 
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-  std::string const cluster_id = argv[3];
-  std::string const zone = argv[4];
+  std::string const project_id = argv[0];
+  std::string const instance_id = argv[1];
+  std::string const cluster_id = argv[2];
+  std::string const zone = argv[3];
 
   //! [aliases]
   namespace cbt = google::cloud::bigtable;
@@ -51,9 +53,7 @@ int main(int argc, char* argv[]) try {
   //! [check instance exists]
   std::cout << "\nCheck Instance exists:\n";
   StatusOr<cbt::InstanceList> instances = instance_admin.ListInstances();
-  if (!instances) {
-    throw std::runtime_error(instances.status().message());
-  }
+  if (!instances) throw std::runtime_error(instances.status().message());
   if (!instances->failed_locations.empty()) {
     std::cerr
         << "The service tells us it has no information about these locations:";
@@ -71,7 +71,8 @@ int main(int argc, char* argv[]) try {
       });
   bool instance_exists = instance_name_it != instances->instances.end();
   std::cout << "The instance " << instance_id
-            << (instance_exists ? "does" : "does not") << " exist already\n";
+            << (instance_exists ? " already exists" : " does not exist")
+            << "\n";
   //! [check instance exists]
 
   // Create instance if does not exists
@@ -108,9 +109,7 @@ int main(int argc, char* argv[]) try {
   //! [list instances]
   std::cout << "\nListing Instances:\n";
   instances = instance_admin.ListInstances();
-  if (!instances) {
-    throw std::runtime_error(instances.status().message());
-  }
+  if (!instances) throw std::runtime_error(instances.status().message());
   if (!instances->failed_locations.empty()) {
     std::cerr
         << "The service tells us it has no information about these locations:";
@@ -128,9 +127,7 @@ int main(int argc, char* argv[]) try {
   //! [get instance]
   std::cout << "\nGet Instance:\n";
   auto instance = instance_admin.GetInstance(instance_id);
-  if (!instance) {
-    throw std::runtime_error(instance.status().message());
-  }
+  if (!instance) throw std::runtime_error(instance.status().message());
   std::cout << "Instance details :\n" << instance->DebugString() << "\n";
   //! [get instance]
 
@@ -138,9 +135,7 @@ int main(int argc, char* argv[]) try {
   std::cout << "\nListing Clusters:\n";
   StatusOr<cbt::ClusterList> cluster_list =
       instance_admin.ListClusters(instance_id);
-  if (!cluster_list) {
-    throw std::runtime_error(cluster_list.status().message());
-  }
+  if (!cluster_list) throw std::runtime_error(cluster_list.status().message());
   if (!cluster_list->failed_locations.empty()) {
     std::cout << "The Cloud Bigtable service reports that the following "
                  "locations are temporarily unavailable and no information "
@@ -160,15 +155,46 @@ int main(int argc, char* argv[]) try {
   std::cout << "Deleting instance " << instance_id << "\n";
   google::cloud::Status delete_status =
       instance_admin.DeleteInstance(instance_id);
-  if (!delete_status.ok()) {
-    throw std::runtime_error(delete_status.message());
-  }
+  if (!delete_status.ok()) throw std::runtime_error(delete_status.message());
   std::cout << "DONE\n";
   //! [delete instance]
+}
 
-  return 0;
-} catch (std::exception const& ex) {
-  std::cerr << "Standard C++ exception raised: " << ex.what() << "\n";
-  return 1;
+void RunAll(std::vector<std::string> const& argv) {
+  namespace examples = ::google::cloud::bigtable::examples;
+  namespace cbt = google::cloud::bigtable;
+
+  if (!argv.empty()) throw Usage{"auto"};
+  if (!examples::RunAdminIntegrationTests()) return;
+  examples::CheckEnvironmentVariablesAreSet({
+      "GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_CLOUD_CPP_BIGTABLE_TEST_ZONE_A",
+  });
+  auto const project_id =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_PROJECT").value();
+  auto const zone_a =
+      google::cloud::internal::GetEnv("GOOGLE_CLOUD_CPP_BIGTABLE_TEST_ZONE_A")
+          .value();
+
+  cbt::InstanceAdmin admin(
+      cbt::CreateDefaultInstanceAdminClient(project_id, cbt::ClientOptions{}));
+
+  auto generator = google::cloud::internal::DefaultPRNG(std::random_device{}());
+  examples::CleanupOldInstances("exin-", admin);
+  auto const instance_id = examples::RandomInstanceId("exin-", generator);
+  auto const cluster_id = instance_id + "-c1";
+
+  std::cout << "\nRunning the BigtableHelloInstance() example" << std::endl;
+  BigtableHelloInstance({project_id, instance_id, cluster_id, zone_a});
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  google::cloud::bigtable::examples::Example example({
+      {"auto", RunAll},
+      {"hello-instance", BigtableHelloInstance},
+  });
+  return example.Run(argc, argv);
 }
 //! [all code]

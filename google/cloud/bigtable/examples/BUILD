@@ -16,74 +16,52 @@ package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
 
-cc_binary(
-    name = "bigtable_hello_app_profile",
-    srcs = ["bigtable_hello_app_profile.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
+load(":bigtable_examples_common.bzl", "bigtable_examples_common_hdrs", "bigtable_examples_common_srcs")
+
+cc_library(
+    name = "bigtable_examples_common",
+    srcs = bigtable_examples_common_srcs,
+    hdrs = bigtable_examples_common_hdrs,
+    deps = [
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/bigtable:bigtable_client",
+        "@com_google_googleapis//google/bigtable/admin/v2:admin_cc_grpc",
+        "@com_google_googleapis//google/bigtable/v2:bigtable_cc_grpc",
+    ],
 )
 
-cc_binary(
-    name = "bigtable_hello_instance_admin",
-    srcs = ["bigtable_hello_instance_admin.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
+load(":bigtable_examples_unit_tests.bzl", "bigtable_examples_unit_tests")
 
-cc_binary(
-    name = "bigtable_hello_table_admin",
-    srcs = ["bigtable_hello_table_admin.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
+[cc_test(
+    name = test.replace("/", "_").replace(".cc", ""),
+    srcs = [test],
+    deps = [
+        ":bigtable_examples_common",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/bigtable:bigtable_client",
+        "//google/cloud/bigtable:bigtable_client_testing",
+        "@com_google_googletest//:gtest_main",
+    ],
+) for test in bigtable_examples_unit_tests]
 
-cc_binary(
-    name = "bigtable_hello_world",
-    srcs = ["bigtable_hello_world.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
+load(":bigtable_examples.bzl", "bigtable_examples")
 
-cc_binary(
-    name = "bigtable_quickstart",
-    srcs = ["bigtable_quickstart.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "bigtable_instance_admin_snippets",
-    srcs = ["bigtable_instance_admin_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "instance_admin_async_snippets",
-    srcs = ["instance_admin_async_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "table_admin_snippets",
-    srcs = ["table_admin_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "table_admin_async_snippets",
-    srcs = ["table_admin_async_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "data_snippets",
-    srcs = ["data_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "data_async_snippets",
-    srcs = ["data_async_snippets.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
-
-cc_binary(
-    name = "bigtable_grpc_credentials",
-    srcs = ["bigtable_grpc_credentials.cc"],
-    deps = ["//google/cloud/bigtable:bigtable_client"],
-)
+[cc_test(
+    name = test.replace("/", "_").replace(".cc", ""),
+    srcs = [test],
+    tags = [
+        "bigtable-integration-tests",
+        "integration-tests",
+    ],
+    deps = [
+        ":bigtable_examples_common",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/bigtable:bigtable_client",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_grpc",
+        "@com_google_googletest//:gtest_main",
+    ],
+) for test in bigtable_examples]

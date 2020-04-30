@@ -37,17 +37,6 @@ def google_cloud_cpp_deps():
             sha256 = "d21d38c4b8e81eed8fa95ede48dd69aba01a3b938be6ac03d2b9dc61886a7183",
         )
 
-    # Load google-cloud-cpp-common.
-    if "com_github_googleapis_google_cloud_cpp_common" not in native.existing_rules():
-        http_archive(
-            name = "com_github_googleapis_google_cloud_cpp_common",
-            strip_prefix = "google-cloud-cpp-common-0.21.0",
-            urls = [
-                "https://github.com/googleapis/google-cloud-cpp-common/archive/v0.21.0.tar.gz",
-            ],
-            sha256 = "2e1cd2a97122a02fe3c58a997657a360e19ec9984b857197a9a193a07b4c092b",
-        )
-
     # Load a version of googletest that we know works.
     if "com_google_googletest" not in native.existing_rules():
         http_archive(
@@ -64,10 +53,10 @@ def google_cloud_cpp_deps():
         http_archive(
             name = "com_google_googleapis",
             urls = [
-                "https://github.com/googleapis/googleapis/archive/e9e90a787703ec5d388902e2cb796aaed3a385b4.tar.gz",
+                "https://github.com/googleapis/googleapis/archive/fea22b1d9f27f86ef355c1d0dba00e0791a08a19.tar.gz",
             ],
-            strip_prefix = "googleapis-e9e90a787703ec5d388902e2cb796aaed3a385b4",
-            sha256 = "4c0ba761e943b818cc8b242ed05d0cfdaaac7c4035a43eeab0820461c77619f0",
+            strip_prefix = "googleapis-fea22b1d9f27f86ef355c1d0dba00e0791a08a19",
+            sha256 = "957ef432cdedbace1621bb023e6d8637ecbaa78856b3fc6e299f9b277ae990ff",
             build_file = "@com_github_googleapis_google_cloud_cpp//bazel:googleapis.BUILD",
         )
 
@@ -121,10 +110,10 @@ def google_cloud_cpp_deps():
         http_archive(
             name = "com_github_curl_curl",
             urls = [
-                "https://curl.haxx.se/download/curl-7.65.3.tar.gz",
+                "https://curl.haxx.se/download/curl-7.69.1.tar.gz",
             ],
-            strip_prefix = "curl-7.65.3",
-            sha256 = "4376ac72b95572fb6c4fbffefb97c7ea0dd083e1974c0e44cd7e49396f454839",
+            strip_prefix = "curl-7.69.1",
+            sha256 = "01ae0c123dee45b01bbaef94c0bc00ed2aec89cb2ee0fd598e0d302a6b5e0a98",
             build_file = "@com_github_googleapis_google_cloud_cpp//bazel:curl.BUILD",
         )
 

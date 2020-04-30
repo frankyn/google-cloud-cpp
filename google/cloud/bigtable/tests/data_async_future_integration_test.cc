@@ -15,7 +15,6 @@
 #include "google/cloud/bigtable/testing/table_integration_test.h"
 #include "google/cloud/testing_util/assert_ok.h"
 #include "google/cloud/testing_util/chrono_literals.h"
-#include "google/cloud/testing_util/init_google_mock.h"
 
 namespace google {
 namespace cloud {
@@ -276,17 +275,18 @@ TEST_F(DataAsyncFutureIntegrationTest, TableReadRowsAllRows) {
   std::vector<bigtable::Cell> actual;
 
   promise<Status> stream_status_promise;
-  table.AsyncReadRows(cq,
-                      [&actual](Row row) {
-                        std::move(row.cells().begin(), row.cells().end(),
-                                  std::back_inserter(actual));
-                        return make_ready_future(true);
-                      },
-                      [&stream_status_promise](Status stream_status) {
-                        stream_status_promise.set_value(stream_status);
-                      },
-                      bigtable::RowSet(bigtable::RowRange::InfiniteRange()),
-                      RowReader::NO_ROWS_LIMIT, Filter::PassAllFilter());
+  table.AsyncReadRows(
+      cq,
+      [&actual](Row row) {
+        std::move(row.cells().begin(), row.cells().end(),
+                  std::back_inserter(actual));
+        return make_ready_future(true);
+      },
+      [&stream_status_promise](Status stream_status) {
+        stream_status_promise.set_value(stream_status);
+      },
+      bigtable::RowSet(bigtable::RowRange::InfiniteRange()),
+      RowReader::NO_ROWS_LIMIT, Filter::PassAllFilter());
 
   auto stream_status = stream_status_promise.get_future().get();
   ASSERT_STATUS_OK(stream_status);
@@ -331,23 +331,9 @@ TEST_F(DataAsyncFutureIntegrationTest, TableReadRowTest) {
 }  // namespace google
 
 int main(int argc, char* argv[]) {
-  google::cloud::testing_util::InitGoogleMock(argc, argv);
-
-  // Make sure the arguments are valid.
-  if (argc != 3) {
-    std::string const cmd = argv[0];
-    auto last_slash = std::string(argv[0]).find_last_of('/');
-    std::cerr << "Usage: " << cmd.substr(last_slash + 1)
-              << " <project> <instance>\n";
-    return 1;
-  }
-
-  std::string const project_id = argv[1];
-  std::string const instance_id = argv[2];
-
+  ::testing::InitGoogleMock(&argc, argv);
   (void)::testing::AddGlobalTestEnvironment(
-      new google::cloud::bigtable::testing::TableTestEnvironment(project_id,
-                                                                 instance_id));
+      new google::cloud::bigtable::testing::TableTestEnvironment);
 
   return RUN_ALL_TESTS();
 }

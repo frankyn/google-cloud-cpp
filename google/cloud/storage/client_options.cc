@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "google/cloud/storage/client_options.h"
-#include "google/cloud/internal/getenv.h"
-#include "google/cloud/log.h"
 #include "google/cloud/storage/oauth2/credentials.h"
 #include "google/cloud/storage/oauth2/google_credentials.h"
+#include "google/cloud/internal/getenv.h"
+#include "google/cloud/log.h"
 #include <cstdlib>
 #include <set>
 #include <sstream>
@@ -75,7 +75,8 @@ StatusOr<ClientOptions> ClientOptions::CreateDefaultClientOptions() {
   return ClientOptions(*creds);
 }
 
-ClientOptions::ClientOptions(std::shared_ptr<oauth2::Credentials> credentials)
+ClientOptions::ClientOptions(std::shared_ptr<oauth2::Credentials> credentials,
+                             ChannelOptions channel_options)
     : credentials_(std::move(credentials)),
       endpoint_("https://storage.googleapis.com"),
       iam_endpoint_("https://iamcredentials.googleapis.com/v1"),
@@ -89,7 +90,8 @@ ClientOptions::ClientOptions(std::shared_ptr<oauth2::Credentials> credentials)
       maximum_simple_upload_size_(
           GOOGLE_CLOUD_CPP_STORAGE_DEFAULT_MAXIMUM_SIMPLE_UPLOAD_SIZE),
       download_stall_timeout_(
-          GOOGLE_CLOUD_CPP_STORAGE_DEFAULT_DOWNLOAD_STALL_TIMEOUT) {
+          GOOGLE_CLOUD_CPP_STORAGE_DEFAULT_DOWNLOAD_STALL_TIMEOUT),
+      channel_options_(std::move(channel_options)) {
   auto emulator =
       google::cloud::internal::GetEnv("CLOUD_STORAGE_TESTBENCH_ENDPOINT");
   if (emulator.has_value()) {

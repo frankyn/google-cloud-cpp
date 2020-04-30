@@ -15,18 +15,19 @@
 # limitations under the License.
 
 if [ -z "${PROJECT_ROOT+x}" ]; then
-  readonly PROJECT_ROOT="$(cd "$(dirname "$0")/../../../.." || exit; pwd)"
+  readonly PROJECT_ROOT="$(
+    cd "$(dirname "$0")/../../../.." || exit
+    pwd
+  )"
 fi
 source "${PROJECT_ROOT}/ci/colors.sh"
 
 TESTBENCH_PID=0
-TESTBENCH_DUMP_LOG=yes
 
 ################################################
 # Terminate the Google Cloud Storage test bench
 # Globals:
 #   TESTBENCH_PID: the process id for the test bench
-#   TESTBENCH_DUMP_LOG: if set to 'yes' the testbench log is dumped
 #   COLOR_*: colorize output messages, defined in colors.sh
 # Arguments:
 #   None
@@ -39,19 +40,6 @@ kill_testbench() {
   kill "${TESTBENCH_PID}"
   wait "${TESTBENCH_PID}" >/dev/null 2>&1
   echo "done."
-  if [ "${TESTBENCH_DUMP_LOG}" = "yes" ] && [ -e "testbench.log" ]; then
-    echo "================ [begin testbench.log] ================"
-    # Travis has a limit of ~10,000 lines, and sometimes the
-    # emulator log gets too long, just print the interesting bits:
-    if [ "$(wc -l "testbench.log" | awk '{print $1}')" -lt 1000 ]; then
-      cat "testbench.log"
-    else
-      head -500 "testbench.log"
-      echo "        [snip snip snip]        "
-      tail -500 "testbench.log"
-    fi
-    echo "================ [end testbench.log] ================"
-  fi
   echo "${COLOR_GREEN}[ ======== ]${COLOR_RESET} Integration test environment tear-down."
 
 }
@@ -76,19 +64,19 @@ start_testbench() {
   trap kill_testbench EXIT
 
   gunicorn --bind 0.0.0.0:0 \
-      --worker-class gevent \
-      --access-logfile - \
-      --pythonpath "${PROJECT_ROOT}/google/cloud/storage/testbench" \
-      testbench:application \
-      >testbench.log 2>&1 </dev/null &
+    --worker-class gevent \
+    --access-logfile - \
+    --pythonpath "${PROJECT_ROOT}/google/cloud/storage/testbench" \
+    testbench:application \
+    >testbench.log 2>&1 </dev/null &
   TESTBENCH_PID=$!
 
   local testbench_port=""
   local -r listening_at='Listening at: http://0.0.0.0:\([1-9][0-9]*\)'
   for attempt in $(seq 1 8); do
     if [[ -r testbench.log ]]; then
-        testbench_port=$(sed -n "s,^.*${listening_at}.*$,\1,p" testbench.log)
-        [[ -n "${testbench_port}" ]] && break
+      testbench_port=$(sed -n "s,^.*${listening_at}.*$,\1,p" testbench.log)
+      [[ -n "${testbench_port}" ]] && break
     fi
     sleep 1
   done

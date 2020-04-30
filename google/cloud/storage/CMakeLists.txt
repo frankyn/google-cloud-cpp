@@ -14,21 +14,15 @@
 # limitations under the License.
 # ~~~
 
-find_package(google_cloud_cpp_common CONFIG REQUIRED)
-
-# This should be included from the top level CMakeLists file
-set(STORAGE_CLIENT_VERSION_MAJOR 1)
-set(STORAGE_CLIENT_VERSION_MINOR 12)
-set(STORAGE_CLIENT_VERSION_PATCH 0)
-
 set(DOXYGEN_PROJECT_NAME "Google Cloud Storage C++ Client")
 set(DOXYGEN_PROJECT_BRIEF "A C++ Client Library for Google Cloud Storage")
 set(DOXYGEN_PROJECT_NUMBER
-    "${STORAGE_CLIENT_VERSION_MAJOR}.${STORAGE_CLIENT_VERSION_MINOR}.${STORAGE_CLIENT_VERSION_PATCH}"
+    "${GOOGLE_CLOUD_CPP_VERSION_MAJOR}.${GOOGLE_CLOUD_CPP_VERSION_MINOR}.${GOOGLE_CLOUD_CPP_VERSION_PATCH}"
 )
-set(DOXYGEN_EXAMPLE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/examples)
-set(DOXYGEN_PREDEFINED "GOOGLE_CLOUD_CPP_NS=v0"
-                       "STORAGE_CLIENT_NS=v${STORAGE_CLIENT_VERSION_MAJOR}")
+set(DOXYGEN_EXAMPLE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/examples"
+                         "${CMAKE_CURRENT_SOURCE_DIR}/quickstart")
+set(DOXYGEN_PREDEFINED "GOOGLE_CLOUD_CPP_NS=v1"
+                       "STORAGE_CLIENT_NS=v${GOOGLE_CLOUD_CPP_VERSION_MAJOR}")
 set(DOXYGEN_EXCLUDE_PATTERNS
     "*/google/cloud/storage/README.md"
     "*/google/cloud/storage/ci/*"
@@ -225,6 +219,7 @@ add_library(
     version_info.h
     well_known_headers.cc
     well_known_headers.h
+    well_known_parameters.cc
     well_known_parameters.h)
 target_link_libraries(
     storage_client
@@ -237,6 +232,8 @@ target_link_libraries(
            OpenSSL::Crypto
            ZLIB::ZLIB
     PRIVATE storage_common_options)
+google_cloud_cpp_add_common_options(storage_client)
+google_cloud_cpp_add_clang_tidy(storage_client)
 target_include_directories(
     storage_client
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
@@ -271,15 +268,12 @@ set_target_properties(
     storage_client
     PROPERTIES
         VERSION
-        ${STORAGE_CLIENT_VERSION_MAJOR}.${STORAGE_CLIENT_VERSION_MINOR}.${STORAGE_CLIENT_VERSION_PATCH}
-        SOVERSION ${STORAGE_CLIENT_VERSION_MAJOR})
+        ${GOOGLE_CLOUD_CPP_VERSION_MAJOR}.${GOOGLE_CLOUD_CPP_VERSION_MINOR}.${GOOGLE_CLOUD_CPP_VERSION_PATCH}
+        SOVERSION ${GOOGLE_CLOUD_CPP_VERSION_MAJOR})
 
 create_bazel_config(storage_client)
-google_cloud_cpp_add_clang_tidy(storage_client)
 
 if (BUILD_TESTING)
-    find_package(google_cloud_cpp_testing CONFIG REQUIRED)
-
     add_library(
         storage_client_testing
         testing/canonical_errors.h
@@ -287,6 +281,8 @@ if (BUILD_TESTING)
         testing/mock_fake_clock.h
         testing/mock_http_request.cc
         testing/mock_http_request.h
+        testing/object_integration_test.cc
+        testing/object_integration_test.h
         testing/random_names.cc
         testing/random_names.h
         testing/retry_tests.h
@@ -299,6 +295,8 @@ if (BUILD_TESTING)
         PUBLIC storage_client nlohmann_json GTest::gmock_main GTest::gmock
                GTest::gtest
         PRIVATE storage_common_options)
+    google_cloud_cpp_add_common_options(storage_client_testing)
+    google_cloud_cpp_add_clang_tidy(storage_client_testing)
     target_include_directories(
         storage_client_testing
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
@@ -320,6 +318,7 @@ if (BUILD_TESTING)
         client_notifications_test.cc
         client_object_acl_test.cc
         client_object_copy_test.cc
+        client_options_test.cc
         client_service_account_test.cc
         client_sign_policy_document_test.cc
         client_sign_url_test.cc
@@ -334,6 +333,7 @@ if (BUILD_TESTING)
         internal/bucket_requests_test.cc
         internal/compute_engine_util_test.cc
         internal/curl_client_test.cc
+        internal/curl_handle_factory_test.cc
         internal/curl_handle_test.cc
         internal/curl_resumable_upload_session_test.cc
         internal/curl_wrappers_disable_sigpipe_handler_test.cc
@@ -390,15 +390,17 @@ if (BUILD_TESTING)
         service_account_test.cc
         signed_url_options_test.cc
         storage_class_test.cc
-        storage_client_options_test.cc
         storage_iam_policy_test.cc
         storage_version_test.cc
-        well_known_headers_test.cc)
+        well_known_headers_test.cc
+        well_known_parameters_test.cc)
 
     foreach (fname ${storage_client_unit_tests})
-        string(REPLACE "/" "_" target ${fname})
-        string(REPLACE ".cc" "" target ${target})
+        string(REPLACE "/" "_" basename ${fname})
+        string(REPLACE ".cc" "" basename ${basename})
+        set(target "storage_${basename}")
         add_executable(${target} ${fname})
+        set_target_properties(${target} PROPERTIES OUTPUT_NAME ${basename})
         if (MSVC)
             target_compile_options(${target} PRIVATE "/bigobj")
         endif ()
@@ -476,9 +478,9 @@ install(
     DESTINATION include/google/cloud/storage/internal)
 
 # Setup global variables used in the following *.in files.
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MAJOR ${STORAGE_CLIENT_VERSION_MAJOR})
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MINOR ${STORAGE_CLIENT_VERSION_MINOR})
-set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_PATCH ${STORAGE_CLIENT_VERSION_PATCH})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MAJOR ${GOOGLE_CLOUD_CPP_VERSION_MAJOR})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_MINOR ${GOOGLE_CLOUD_CPP_VERSION_MINOR})
+set(GOOGLE_CLOUD_CPP_CONFIG_VERSION_PATCH ${GOOGLE_CLOUD_CPP_VERSION_PATCH})
 set(GOOGLE_CLOUD_CPP_PC_NAME "The Google Cloud Storage C++ Client Library")
 set(GOOGLE_CLOUD_CPP_PC_DESCRIPTION
     "Provides C++ APIs to access Google Cloud Storage.")

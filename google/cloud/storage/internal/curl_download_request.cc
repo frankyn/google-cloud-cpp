@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "google/cloud/storage/internal/curl_download_request.h"
-#include "google/cloud/internal/throw_delegate.h"
-#include "google/cloud/log.h"
 #include "google/cloud/storage/internal/binary_data_as_debug_string.h"
 #include "google/cloud/storage/internal/curl_wrappers.h"
+#include "google/cloud/internal/throw_delegate.h"
+#include "google/cloud/log.h"
 #include <curl/multi.h>
 #include <algorithm>
 #include <cstring>
@@ -56,6 +56,7 @@ extern "C" std::size_t CurlDownloadRequestHeader(char* contents,
 
 CurlDownloadRequest::CurlDownloadRequest()
     : headers_(nullptr, &curl_slist_free_all),
+      download_stall_timeout_(0),
       multi_(nullptr, &curl_multi_cleanup),
       spill_(CURL_MAX_WRITE_SIZE) {}
 
@@ -116,7 +117,7 @@ StatusOr<HttpResponse> CurlDownloadRequest::Close() {
     }
   }
 
-  StatusOr<long> http_code = handle_.GetResponseCode();
+  auto http_code = handle_.GetResponseCode();
   if (!http_code.ok()) {
     TRACE_STATE() << ", http_code.status=" << http_code.status();
     return http_code.status();
@@ -149,7 +150,11 @@ StatusOr<ReadSourceResult> CurlDownloadRequest::Read(char* buf, std::size_t n) {
   handle_.FlushDebug(__func__);
   TRACE_STATE();
 
+#if CURL_AT_LEAST_VERSION(7, 69, 0)
+  if (!curl_closed_ && paused_) {
+#else
   if (!curl_closed_) {
+#endif  // libcurl >= 7.69.0
     auto status = handle_.EasyPause(CURLPAUSE_RECV_CONT);
     if (!status.ok()) {
       TRACE_STATE() << ", status=" << status;
@@ -192,17 +197,23 @@ StatusOr<ReadSourceResult> CurlDownloadRequest::Read(char* buf, std::size_t n) {
     return ReadSourceResult{bytes_read, std::move(response)};
   }
   TRACE_STATE() << ", code=100";
-  return ReadSourceResult{bytes_read,
-                          HttpResponse{100, {}, std::move(received_headers_)}};
+  return ReadSourceResult{
+      bytes_read,
+      HttpResponse{
+          HttpStatusCode::kContinue, {}, std::move(received_headers_)}};
 }
 
 void CurlDownloadRequest::SetOptions() {
+  // We get better performance using a slightly larger buffer (128KiB) than the
+  // default buffer size set by libcurl (16KiB)
+  auto constexpr kDefaultBufferSize = 128 * 1024L;
+
   handle_.SetOption(CURLOPT_URL, url_.c_str());
   handle_.SetOption(CURLOPT_HTTPHEADER, headers_.get());
   handle_.SetOption(CURLOPT_USERAGENT, user_agent_.c_str());
-  handle_.SetOption(CURLOPT_NOSIGNAL, 1);
+  handle_.SetOption(CURLOPT_NOSIGNAL, 1L);
   handle_.SetOption(CURLOPT_NOPROGRESS, 1L);
-  handle_.SetOption(CURLOPT_BUFFERSIZE, 128 * 1024L);
+  handle_.SetOption(CURLOPT_BUFFERSIZE, kDefaultBufferSize);
   if (!payload_.empty()) {
     handle_.SetOption(CURLOPT_POSTFIELDSIZE, payload_.length());
     handle_.SetOption(CURLOPT_POSTFIELDS, payload_.c_str());
@@ -213,8 +224,10 @@ void CurlDownloadRequest::SetOptions() {
     // Timeout if the download receives less than 1 byte/second (i.e.
     // effectively no bytes) for `download_stall_timeout_` seconds.
     handle_.SetOption(CURLOPT_LOW_SPEED_LIMIT, 1L);
-    handle_.SetOption(CURLOPT_LOW_SPEED_TIME,
-                      static_cast<long>(download_stall_timeout_.count()));
+    handle_.SetOption(
+        CURLOPT_LOW_SPEED_TIME,
+        // NOLINTNEXTLINE(google-runtime-int) - libcurl *requires* `long`
+        static_cast<long>(download_stall_timeout_.count()));
   }
   if (in_multi_) {
     return;

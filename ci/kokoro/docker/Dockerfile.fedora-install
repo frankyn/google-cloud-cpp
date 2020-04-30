@@ -12,97 +12,85 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG DISTRO_VERSION=30
+ARG DISTRO_VERSION=31
 FROM fedora:${DISTRO_VERSION}
 ARG NCPU=4
 
-RUN dnf makecache && dnf install -y \
-    autoconf \
-    automake \
-    c-ares-devel \
-    ccache \
-    clang \
-    clang-analyzer \
-    clang-tools-extra \
-    cmake \
-    curl \
-    doxygen \
-    gcc-c++ \
-    git \
-    grpc-devel \
-    grpc-plugins \
-    libcurl-devel \
-    libcxx-devel \
-    libcxxabi-devel \
-    libtool \
-    make \
-    ncurses-term \
-    openssl-devel \
-    pkgconfig \
-    protobuf-compiler \
-    python3 \
-    python3-devel \
-    shtool \
-    unzip \
-    wget \
-    which \
-    zlib-devel
+# Fedora includes packages for gRPC, libcurl, and OpenSSL that are recent enough
+# for `google-cloud-cpp`. Install these packages and additional development
+# tools to compile the dependencies:
+RUN dnf makecache && \
+    dnf install -y abi-compliance-checker abi-dumper \
+        clang clang-tools-extra cmake diffutils doxygen findutils gcc-c++ git \
+        grpc-devel grpc-plugins libcxx-devel libcxxabi-devel libcurl-devel \
+        make openssl-devel pkgconfig protobuf-compiler python3 python3-pip \
+        ShellCheck tar unzip w3m wget which zlib-devel
 
+# Install the the buildifier tool, which does not compile with the default
+# golang compiler for Ubuntu 16.04 and Ubuntu 18.04.
+RUN wget -q -O /usr/bin/buildifier https://github.com/bazelbuild/buildtools/releases/download/0.29.0/buildifier
+RUN chmod 755 /usr/bin/buildifier
+
+# Install cmake_format to automatically format the CMake list files.
+#     https://github.com/cheshirekow/cmake_format
+# Pin this to an specific version because the formatting changes when the
+# "latest" version is updated, and we do not want the builds to break just
+# because some third party changed something.
 RUN pip3 install --upgrade pip
+RUN pip3 install cmake_format==0.6.8
+
+# Install black to automatically format the Python files.
+RUN pip3 install black==19.3b0
+
+# Install shfmt to automatically format the Shell scripts.
+RUN curl -L -o /usr/local/bin/shfmt \
+    "https://github.com/mvdan/sh/releases/download/v3.1.0/shfmt_v3.1.0_linux_amd64" && \
+    chmod 755 /usr/local/bin/shfmt
+
+# Install the Python modules needed to run the storage testbench
+RUN dnf makecache && dnf install -y python3-devel
 RUN pip3 install setuptools
 RUN pip3 install flask==1.1.1 Werkzeug==1.0.0 httpbin==0.7.0 \
     gevent==1.4.0 gunicorn==19.10.0 crc32c==2.0
 
+# Install googletest, remove the downloaded files and the temporary artifacts
+# after a successful build to keep the image smaller (and with fewer layers)
 WORKDIR /var/tmp/build
-RUN wget -q https://github.com/google/crc32c/archive/1.0.6.tar.gz
-RUN tar -xf 1.0.6.tar.gz
-WORKDIR /var/tmp/build/crc32c-1.0.6
-RUN cmake \
-      -DCMAKE_BUILD_TYPE=Release \
+RUN curl -sSL https://github.com/google/googletest/archive/release-1.10.0.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    cmake \
+      -DCMAKE_BUILD_TYPE="Release" \
       -DBUILD_SHARED_LIBS=yes \
-      -DCRC32C_BUILD_TESTS=OFF \
-      -DCRC32C_BUILD_BENCHMARKS=OFF \
-      -DCRC32C_USE_GLOG=OFF \
-      -H. -Bcmake-out/crc32c
-RUN cmake --build cmake-out/crc32c --target install -- -j ${NCPU}
-RUN ldconfig
+      -H. -Bcmake-out/googletest && \
+    cmake --build cmake-out/googletest --target install -- -j ${NCPU} && \
+    ldconfig && \
+    cd /var/tmp && rm -fr build
 
-# Install googleapis.
+# Install googleapis, remove the downloaded files and the temporary artifacts
+# after a successful build to keep the image smaller (and with fewer layers)
 WORKDIR /var/tmp/build
-RUN wget -q https://github.com/googleapis/cpp-cmakefiles/archive/v0.5.0.tar.gz && \
-    tar -xf v0.5.0.tar.gz && \
-    cd /var/tmp/build/cpp-cmakefiles-0.5.0 && \
+RUN curl -sSL https://github.com/googleapis/cpp-cmakefiles/archive/v0.9.0.tar.gz | \
+    tar -xzf - --strip-components=1 && \
     cmake \
       -DBUILD_SHARED_LIBS=YES \
       -H. -Bcmake-out && \
     cmake --build cmake-out --target install -- -j ${NCPU} && \
     ldconfig && \
-    cd /var/tmp && rm -fr /var/tmp/build
+    cd /var/tmp && rm -fr build
 
-# Install googletest.
 WORKDIR /var/tmp/build
-RUN wget -q https://github.com/google/googletest/archive/release-1.10.0.tar.gz
-RUN tar -xf release-1.10.0.tar.gz
-WORKDIR /var/tmp/build/googletest-release-1.10.0
-RUN cmake \
-      -DCMAKE_BUILD_TYPE="Release" \
+RUN curl -sSL https://github.com/google/crc32c/archive/1.1.0.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    cmake \
+      -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=yes \
-      -H. -Bcmake-out/googletest
-RUN cmake --build cmake-out/googletest --target install -- -j ${NCPU}
-RUN ldconfig
-
-# Download and compile google-cloud-cpp from source too:
-WORKDIR /var/tmp/build
-RUN wget -q https://github.com/googleapis/google-cloud-cpp-common/archive/v0.20.0.tar.gz
-RUN tar -xf v0.20.0.tar.gz
-WORKDIR /var/tmp/build/google-cloud-cpp-common-0.20.0
-# Compile without the tests because we are testing google-cloud-cpp, not the
-# base libraries
-RUN cmake -H. -Bcmake-out \
-    -DBUILD_TESTING=OFF \
-    -DGOOGLE_CLOUD_CPP_TESTING_UTIL_ENABLE_INSTALL=ON
-RUN cmake --build cmake-out -- -j $(nproc)
-RUN cmake --build cmake-out --target install
+      -DCRC32C_BUILD_TESTS=OFF \
+      -DCRC32C_BUILD_BENCHMARKS=OFF \
+      -DCRC32C_USE_GLOG=OFF \
+      -H. -Bcmake-out/crc32c && \
+    cmake --build cmake-out/crc32c --target install -- -j ${NCPU} && \
+    ldconfig && \
+    cd /var/tmp && rm -fr build
 
 # Install the Cloud Bigtable emulator and the Cloud Bigtable command-line
 # client.  They are used in the integration tests.

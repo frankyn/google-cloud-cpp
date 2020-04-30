@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO(#3701) Change this visibility to "//:__subpackages__" so that users are
+# required to use the top-level BUILD file rather than reaching down into this
+# one.
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])  # Apache 2.0
@@ -22,10 +25,15 @@ cc_library(
     name = "bigtable_client",
     srcs = bigtable_client_srcs,
     hdrs = bigtable_client_hdrs,
+    # Do not sort: grpc++ must come last
     deps = [
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_grpc_utils",
-        "@com_google_googleapis//:bigtable_protos",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "@com_google_googleapis//google/bigtable/admin/v2:admin_cc_grpc",
+        "@com_google_googleapis//google/bigtable/v2:bigtable_cc_grpc",
+        "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
+        "@com_google_googleapis//google/rpc:error_details_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
     ],
 )
 
@@ -37,10 +45,11 @@ cc_library(
     hdrs = bigtable_client_testing_hdrs,
     deps = [
         ":bigtable_client",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_grpc_utils",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_grpc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -52,10 +61,11 @@ load(":bigtable_client_unit_tests.bzl", "bigtable_client_unit_tests")
     deps = [
         ":bigtable_client",
         ":bigtable_client_testing",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_grpc_utils",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_grpc",
+        "@com_google_googletest//:gtest_main",
     ],
 ) for test in bigtable_client_unit_tests]
 
@@ -68,9 +78,10 @@ cc_test(
     deps = [
         ":bigtable_client",
         ":bigtable_client_testing",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_common",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud:google_cloud_cpp_grpc_utils",
-        "@com_github_googleapis_google_cloud_cpp_common//google/cloud/testing_util:google_cloud_cpp_testing",
-        "@com_google_googletest//:gtest",
+        "//google/cloud:google_cloud_cpp_common",
+        "//google/cloud:google_cloud_cpp_grpc_utils",
+        "//google/cloud/testing_util:google_cloud_cpp_testing",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_grpc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
