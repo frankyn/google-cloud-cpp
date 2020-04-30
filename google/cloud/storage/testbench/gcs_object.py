@@ -50,7 +50,6 @@ class GcsObjectVersion(object):
             self.media = testbench_utils.corrupt_media(media)
 
         self.metadata = {
-<<<<<<< HEAD
             'timeCreated': timestamp,
             'updated': timestamp,
             'metageneration': "0",
@@ -65,23 +64,6 @@ class GcsObjectVersion(object):
             },
             'md5Hash': base64.b64encode(hashlib.md5(self.media).digest()).decode('utf-8'),
             'crc32c': base64.b64encode(struct.pack('>I', crc32c.crc32(self.media))).decode('utf-8')
-=======
-            "timeCreated": timestamp,
-            "updated": timestamp,
-            "metageneration": 0,
-            "generation": generation,
-            "location": "US",
-            "storageClass": "STANDARD",
-            "size": len(self.media),
-            "etag": "XYZ=",
-            "owner": {"entity": "project-owners-123456789", "entityId": ""},
-            "md5Hash": base64.b64encode(hashlib.md5(self.media).digest()).decode(
-                "utf-8"
-            ),
-            "crc32c": base64.b64encode(
-                struct.pack(">I", crc32c.crc32(self.media))
-            ).decode("utf-8"),
->>>>>>> master
         }
         if request.headers.get("content-type") is not None:
             self.metadata["contentType"] = request.headers.get("content-type")
@@ -121,7 +103,6 @@ class GcsObjectVersion(object):
         now = time.gmtime(time.time())
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", now)
         # Some values cannot be changed via updates, so we always reset them.
-<<<<<<< HEAD
         tmp.update({
             'kind': 'storage#object',
             'bucket': self.bucket_name,
@@ -132,20 +113,6 @@ class GcsObjectVersion(object):
             'updated': timestamp,
         })
         tmp['metageneration'] = str(int(tmp.get('metageneration', "0")) + 1)
-=======
-        tmp.update(
-            {
-                "kind": "storage#object",
-                "bucket": self.bucket_name,
-                "name": self.name,
-                "id": self.object_id,
-                "selfLink": self.gcs_url + self.name,
-                "projectNumber": "123456789",
-                "updated": timestamp,
-            }
-        )
-        tmp["metageneration"] = tmp.get("metageneration", 0) + 1
->>>>>>> master
         self.metadata = tmp
         self._validate_hashes()
 
@@ -286,7 +253,6 @@ class GcsObjectVersion(object):
         # Replace or insert the entry.
         indexed = testbench_utils.index_acl(self.metadata.get("acl", []))
         indexed[entity] = {
-<<<<<<< HEAD
             'bucket': self.bucket_name,
             'email': email,
             'entity': entity,
@@ -298,19 +264,6 @@ class GcsObjectVersion(object):
             'object': self.name,
             'role': role,
             'selfLink': self.metadata.get('selfLink') + '/acl/' + entity
-=======
-            "bucket": self.bucket_name,
-            "email": email,
-            "entity": entity,
-            "entity_id": "",
-            "etag": self.metadata.get("etag", "XYZ="),
-            "generation": self.generation,
-            "id": self.metadata.get("id", "") + "/" + entity,
-            "kind": "storage#objectAccessControl",
-            "object": self.name,
-            "role": role,
-            "selfLink": self.metadata.get("selfLink") + "/acl/" + entity,
->>>>>>> master
         }
         self.metadata["acl"] = list(indexed.values())
         return indexed[entity]

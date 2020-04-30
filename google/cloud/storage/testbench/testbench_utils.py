@@ -241,17 +241,11 @@ def extract_media(request):
     :return: the full media of the request.
     :rtype: str
     """
-<<<<<<< HEAD
     data = None
     if request.environ.get('HTTP_TRANSFER_ENCODING', '') == 'chunked':
         return check_content_encoding(request, request.environ.get('wsgi.input').read())
     else:
         return check_content_encoding(request, request.data)
-=======
-    if request.environ.get("HTTP_TRANSFER_ENCODING", "") == "chunked":
-        return request.environ.get("wsgi.input").read()
-    return request.data
->>>>>>> master
 
 
 def corrupt_media(media):
