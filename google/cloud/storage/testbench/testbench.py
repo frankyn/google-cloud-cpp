@@ -28,9 +28,42 @@ import re
 import testbench_utils
 import time
 import sys
+import socket
+import struct
 from werkzeug import serving
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from werkzeug.serving import WSGIRequestHandler
 
+
+class ConnectionIncludedHandler(WSGIRequestHandler):
+  def make_environ(self):
+    make_environ = super().make_environ()
+    make_environ["CUSTOM_CONNECTION"] = self.connection
+    #make_environ["CONNECTION"].setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+    #make_environ["CONNECTION"].close()
+    #raise "Force reset"
+    return make_environ
+
+
+# from http.server import HTTPServer, BaseHTTPRequestHandler
+# import random
+
+# class S(BaseHTTPRequestHandler):
+#     def do_POST(self):
+#         print("in post method")
+#         self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+#         print(self.connection)
+#         self.request.close()
+#         return
+
+
+# def run(server_class=HTTPServer, handler_class=S, port=8082):
+#     server_address = ('', port)
+#     httpd = server_class(server_address, handler_class)
+#     print('Starting httpd...')
+#     httpd.serve_forever()
+
+# #run()
 
 @httpbin.app.errorhandler(error_response.ErrorResponse)
 def httpbin_error(error):
@@ -99,6 +132,7 @@ def buckets_list():
 @gcs.route("/b", methods=["POST"])
 def buckets_insert():
     """Implement the 'Buckets: insert' API: create a new Bucket."""
+    testbench_utils.reset_connection(flask.request)
     base_url = flask.url_for("gcs_index", _external=True)
     insert_magic_bucket(base_url)
     payload = json.loads(flask.request.data)
@@ -921,7 +955,9 @@ def main():
         use_reloader=True,
         use_debugger=arguments.debug,
         use_evalex=True,
+        request_handler=ConnectionIncludedHandler,
     )
+
 
 
 if __name__ == "__main__":
