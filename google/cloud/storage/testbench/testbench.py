@@ -769,6 +769,8 @@ def upload_error(error):
 @upload.route("/b/<bucket_name>/o", methods=["POST"])
 def objects_insert(bucket_name):
     """Implement the 'Objects: insert' API.  Insert a new GCS Object."""
+    return flask.Response(status=503)
+
     gcs_url = flask.url_for(
         "objects_insert", bucket_name=bucket_name, _external=True
     ).replace("/upload/", "/")
@@ -785,6 +787,7 @@ def objects_insert(bucket_name):
         )
 
     if upload_type == "resumable":
+        #return flask.Response("Service Unavailable", status=503)
         bucket = testbench_utils.lookup_bucket(bucket_name)
         upload_url = flask.url_for(
             "objects_insert", bucket_name=bucket_name, _external=True

@@ -402,7 +402,9 @@ def parse_multi_part(request):
     resource_headers, resource_body = parse_part(parts[1])
     # parts[2] is the media, with some headers
     media_headers, media_body = parse_part(parts[2])
-    end = media_body.find(b"\r\n--" + boundary + b"--\r\n")
+    print(media_body)
+    # Bug(frankyn): Node.js library required updating ending "--\r\n" to "--"
+    end = media_body.find(b"\r\n--" + boundary + b"--")
     if end == -1:
         raise error_response.ErrorResponse(
             "Missing end marker (--%s--) in media body" % boundary
