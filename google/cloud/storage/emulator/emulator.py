@@ -434,7 +434,16 @@ def object_list(bucket_name):
         "prefixes": prefixes,
     }
     fields = flask.request.args.get("fields", None)
-    return utils.common.filter_response_rest(response, None, fields)
+    ### Prototype Code
+    payload = json.dumps(utils.common.filter_response_rest(response, None, fields))
+    def data():
+      yield payload
+    headers = {}
+    instructions = utils.common.extract_instruction(flask.request, None)
+    if instructions == "return-broken-stream":
+      headers["Content-Length"] = len(payload) + 10
+    ### Prototype Code
+    return flask.Response(data(), status=200, headers=headers)
 
 
 @gcs.route("/b/<bucket_name>/o/<path:object_name>", methods=["PUT"])
