@@ -19,6 +19,7 @@ package storage
 import (
 	"net/url"
 	"strings"
+	"fmt"
 
 	"google.golang.org/api/googleapi"
 )
@@ -41,7 +42,10 @@ func shouldRetry(err error) bool {
 		}
 		return false
 	case interface{ Temporary() bool }:
+		fmt.Printf("TEMPORARY %v", e)
 		return e.Temporary()
+	case interface{ Unwrap() error }:
+		return shouldRetry(e.Unwrap())
 	default:
 		return false
 	}
