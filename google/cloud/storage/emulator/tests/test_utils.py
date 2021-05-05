@@ -16,12 +16,16 @@
 """Unit test for utils"""
 
 import http
+import io
 import os
 import unittest
 import urllib
 import gzip
 import utils
+import json
+import warnings
 from werkzeug.test import create_environ
+from werkzeug.wrappers import Request
 
 from google.cloud.storage_v1.proto import storage_pb2 as storage_pb2
 from google.cloud.storage_v1.proto.storage_resources_pb2 import CommonEnums
@@ -338,6 +342,29 @@ class TestCommonUtils(unittest.TestCase):
         with self.assertRaises(utils.error.RestException):
             utils.common.parse_multipart(request)
 
+    def test_enforce_patch_override_failure(self):
+        environ = create_environ(
+            base_url="http://localhost:8080",
+            content_length=0,
+            data="",
+            content_type="application/octet-stream",
+            method="POST",
+            headers={"X-Http-Method-Override": "other"},
+        )
+        with self.assertRaises(utils.error.RestException):
+            utils.common.enforce_patch_override(Request(environ))
+
+    def test_enforce_patch_override_success(self):
+        environ = create_environ(
+            base_url="http://localhost:8080",
+            content_length=0,
+            data="",
+            content_type="application/octet-stream",
+            method="POST",
+            headers={"X-Http-Method-Override": "PATCH"},
+        )
+        utils.common.enforce_patch_override(Request(environ))
+
 
 class TestGeneration(unittest.TestCase):
     def test_extract_precondition(self):
@@ -448,6 +475,151 @@ class TestError(unittest.TestCase):
         self.assertIn("Traceback (most recent call last):", body)
         self.assertIn("TypeError", body)
         self.assertIn("custom message", body)
+
+
+class TestRetryTest(unittest.TestCase):
+    def setUp(self):
+        self.emulator = os.getenv("CLOUD_STORAGE_EMULATOR_ENDPOINT")
+        if self.emulator is None:
+            self.skipTest("CLOUD_STORAGE_EMULATOR_ENDPOINT is not set")
+        self.conn = http.client.HTTPConnection(
+            self.emulator[len("http://") :], timeout=10
+        )
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_retry_test_resource_crud(self):
+        self.conn.request("GET", "/retry_tests")
+        response = self.conn.getresponse()
+        self.assertEqual(response.code, 200)
+        self.conn.close()
+
+        initial_retry_test = {"instructions": {"storage.buckets.list": ["return-503"]}}
+        request_body = json.dumps(initial_retry_test)
+        self.conn.request("POST", "/retry_test", body=request_body)
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        retry_test = json.loads(body)
+        retry_test_id = retry_test.get("id", None)
+        self.assertIsNotNone(retry_test_id)
+        self.conn.close()
+
+        self.conn.request("GET", "/retry_test/%s" % (retry_test_id))
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        retry_test = json.loads(body)
+        self.assertEqual(retry_test["instructions"], initial_retry_test["instructions"])
+        self.conn.close()
+
+        self.conn.request("DELETE", "/retry_test/%s" % (retry_test_id))
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        self.assertIn("Deleted %s" % (retry_test_id), body)
+        self.conn.close()
+
+    def test_retry_test_reset_connection(self):
+
+        initial_retry_test = {
+            "instructions": {"storage.buckets.list": ["return-reset-connection"]}
+        }
+        request_body = json.dumps(initial_retry_test)
+        self.conn.request("POST", "/retry_test", body=request_body)
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        retry_test = json.loads(body)
+        retry_test_id = retry_test.get("id", None)
+        self.assertIsNotNone(retry_test_id)
+        self.conn.close()
+
+        self.conn.request(
+            "GET",
+            "/storage/v1/b?project=test",
+            headers={"x-retry-test-id": retry_test_id},
+        )
+        with self.assertRaises(ConnectionResetError):
+            response = self.conn.getresponse()
+        self.conn.close()
+
+        self.conn.request("DELETE", "/retry_test/%s" % (retry_test_id))
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        self.assertIn("Deleted %s" % (retry_test_id), body)
+        self.conn.close()
+
+    def test_retry_test_broken_stream(self):
+
+        initial_retry_test = {
+            "instructions": {"storage.buckets.list": ["return-broken-stream"]}
+        }
+        request_body = json.dumps(initial_retry_test)
+        self.conn.request("POST", "/retry_test", body=request_body)
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        retry_test = json.loads(body)
+        retry_test_id = retry_test.get("id", None)
+        self.assertIsNotNone(retry_test_id)
+        self.conn.close()
+
+        self.conn.request(
+            "GET",
+            "/storage/v1/b?project=test",
+            headers={"x-retry-test-id": retry_test_id},
+        )
+        with self.assertRaises(http.client.IncompleteRead):
+            response = self.conn.getresponse()
+            response.read().decode("utf-8")
+        self.conn.close()
+
+        self.conn.request("DELETE", "/retry_test/%s" % (retry_test_id))
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        self.assertIn("Deleted %s" % (retry_test_id), body)
+        self.conn.close()
+
+    def test_retry_test_503(self):
+
+        initial_retry_test = {
+            "instructions": {"storage.buckets.list": ["return-503", "return-503"]}
+        }
+        request_body = json.dumps(initial_retry_test)
+        self.conn.request("POST", "/retry_test", body=request_body)
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        retry_test = json.loads(body)
+        retry_test_id = retry_test.get("id", None)
+        self.assertIsNotNone(retry_test_id)
+        self.conn.close()
+
+        self.conn.request(
+            "GET",
+            "/storage/v1/b?project=test",
+            headers={"x-retry-test-id": retry_test_id},
+        )
+        self.assertEqual(self.conn.getresponse().code, 503)
+        self.conn.close()
+
+        self.conn.request(
+            "GET",
+            "/storage/v1/b?project=test",
+            headers={"x-retry-test-id": retry_test_id},
+        )
+        self.assertEqual(self.conn.getresponse().code, 503)
+        self.conn.close()
+
+        self.conn.request(
+            "GET",
+            "/storage/v1/b?project=test",
+            headers={"x-retry-test-id": retry_test_id},
+        )
+        self.assertEqual(self.conn.getresponse().code, 200)
+        self.conn.close()
+
+        self.conn.request("DELETE", "/retry_test/%s" % (retry_test_id))
+        response = self.conn.getresponse()
+        body = response.read().decode("utf-8")
+        self.assertIn("Deleted %s" % (retry_test_id), body)
+        self.conn.close()
 
 
 class TestHandleGzip(unittest.TestCase):

@@ -62,8 +62,6 @@ class DataHolder(types.SimpleNamespace):
         name = request.args.get("name", "")
         rest_only = {}
         if len(request.data) > 0 and request.data.decode("utf-8") != "{}":
-            if name != "":
-                utils.error.invalid("name argument in non-empty payload", None)
             data = json.loads(request.data)
             rest_only = cls.__extract_rest_only(data)
             metadata = json_format.ParseDict(data, resources_pb2.Object())

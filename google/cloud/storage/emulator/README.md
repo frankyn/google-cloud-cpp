@@ -84,3 +84,31 @@ For N==1 and N==2 behave like `return-305-after-256K`, for `N>=3` ignore the
 failure instruction and return successfully. This is used to test failures during
 retry, the client cooperates by sending the retry counter in the failure
 instructions.
+
+
+## Retry Test API
+
+### Creating a new Retry Test
+
+```bash
+    curl -X POST "http://localhost:9000/retry_test" -H 'Content-Type: application/json' \
+         -d '{"instructions":{"storage.buckets.list": ["return-503"]}}'
+```
+
+### Get a Retry Test resource
+
+```bash
+    curl -X GET "http://localhost:9000/retry_test/1d05c20627844214a9ff7cbcf696317d"
+```
+
+### Delete a Retry Test resource
+
+```bash
+    curl -X DELETE "http://localhost:9000/retry_test/1d05c20627844214a9ff7cbcf696317d"
+```
+
+### Causing a failure using x-retry-test-id header
+
+```bash
+    curl -H "x-retry-test-id: 1d05c20627844214a9ff7cbcf696317d" "http://localhost:9100/storage/v1/b?project=test"
+```
