@@ -21,6 +21,7 @@ import gcs as gcs_type
 import grpc_server
 import httpbin
 import utils
+import time
 from utils.handle_gzip import HandleGzipMiddleware
 from functools import wraps
 from werkzeug import serving
@@ -745,6 +746,7 @@ upload.debug = False
 @upload.route("/b/<bucket_name>/o", methods=["POST"])
 @retry_test(method="storage.objects.insert")
 def object_insert(bucket_name):
+    print("POST")
     db.insert_test_bucket(None)
     bucket = db.get_bucket_without_generation(bucket_name, None).metadata
     upload_type = flask.request.args.get("uploadType")
@@ -771,6 +773,9 @@ def object_insert(bucket_name):
 @upload.route("/b/<bucket_name>/o", methods=["PUT"])
 @retry_test(method="storage.objects.insert")
 def resumable_upload_chunk(bucket_name):
+    print("PUT")
+    time.sleep(20000)
+    print("????")
     request = flask.request
     upload_id = request.args.get("upload_id")
     if upload_id is None:
